@@ -108,6 +108,7 @@ export interface DesktopWindowBridge {
 }
 
 export interface DesktopWindowModuleBridge {
+  openNew?: (options?: { pendingOpenProjectPath?: string | null }) => Promise<void>;
   getCurrentWindow?: () => DesktopWindowBridge;
 }
 
@@ -118,6 +119,11 @@ export interface DesktopEventsBridge {
 export interface DesktopBrowserShortcutEvent {
   browserId?: string;
   action: "focus-url";
+}
+
+export interface DesktopBrowserNewTabRequestEvent {
+  sourceBrowserId: string;
+  url: string;
 }
 
 export interface DesktopBrowserBridge {

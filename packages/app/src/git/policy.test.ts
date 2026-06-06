@@ -49,7 +49,7 @@ function createInput(overrides: Partial<BuildGitActionsInput> = {}): BuildGitAct
     aheadOfOrigin: 0,
     behindOfOrigin: 0,
     shouldPromoteArchive: false,
-    shipDefault: "merge",
+    shipDefault: "pr",
     runtime: {
       commit: {
         disabled: false,
@@ -366,45 +366,80 @@ describe("git-actions-policy", () => {
     );
   });
 
-  it("respects the ship preference when choosing between PR merge and local merge", () => {
-    const prPreferredActions = buildGitActions(
+  it("promotes ready PR merge over update-from-base", () => {
+    const actions = buildGitActions(
       createInput({
         hasRemote: true,
         isOnBaseBranch: false,
         aheadCount: 2,
+        behindBaseCount: 3,
         hasPullRequest: true,
         pullRequestUrl: "https://example.com/pr/456",
         pullRequestState: "open",
         pullRequestMergeable: "MERGEABLE",
-        pullRequestGithub: githubStatus(),
-        shipDefault: "pr",
+        pullRequestGithub: githubStatus({ mergeStateStatus: "CLEAN" }),
       }),
     );
-    const localMergePreferredActions = buildGitActions(
+
+    expect(actions.primary).toMatchObject({
+      id: "merge-pr-squash",
+      label: "Squash and merge",
+    });
+  });
+
+  it("promotes Create PR over push and local merge when PR is the ship default", () => {
+    const actions = buildGitActions(
       createInput({
         hasRemote: true,
         isOnBaseBranch: false,
         aheadCount: 2,
-        hasPullRequest: true,
-        pullRequestUrl: "https://example.com/pr/456",
-        pullRequestState: "open",
-        pullRequestMergeable: "MERGEABLE",
-        pullRequestGithub: githubStatus(),
+        aheadOfOrigin: 2,
+        behindBaseCount: 3,
+      }),
+    );
+
+    expect(actions.primary).toMatchObject({
+      id: "pr",
+      label: "Create PR",
+    });
+  });
+
+  it("uses local merge when merge is the stored ship default", () => {
+    const actions = buildGitActions(
+      createInput({
+        hasRemote: true,
+        isOnBaseBranch: false,
+        aheadCount: 2,
+        behindBaseCount: 3,
         shipDefault: "merge",
       }),
     );
 
-    expect(prPreferredActions.primary).toMatchObject({
-      id: "merge-pr-squash",
-      label: "Squash and merge",
-    });
-    expect(localMergePreferredActions.primary).toMatchObject({
+    expect(actions.primary).toMatchObject({
       id: "merge-branch",
       label: "Merge locally",
     });
-    expect(
-      localMergePreferredActions.secondary.some((action) => action.id === "merge-pr-squash"),
-    ).toBe(true);
+  });
+
+  it("promotes ready PR merge over local merge", () => {
+    const actions = buildGitActions(
+      createInput({
+        hasRemote: true,
+        isOnBaseBranch: false,
+        aheadCount: 2,
+        hasPullRequest: true,
+        pullRequestUrl: "https://example.com/pr/456",
+        pullRequestState: "open",
+        pullRequestMergeable: "MERGEABLE",
+        pullRequestGithub: githubStatus(),
+      }),
+    );
+
+    expect(actions.primary).toMatchObject({
+      id: "merge-pr-squash",
+      label: "Squash and merge",
+    });
+    expect(actions.secondary.some((action) => action.id === "merge-branch")).toBe(true);
   });
 
   it("keeps the merge-pr actions in the feature branch menu", () => {
@@ -675,6 +710,7 @@ describe("git-actions-policy", () => {
       }),
     );
 
+    expect(actions.primary).toMatchObject({ id: "pr", label: "View PR" });
     expect(actions.secondary).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

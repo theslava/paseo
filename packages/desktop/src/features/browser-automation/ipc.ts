@@ -17,7 +17,7 @@ import {
   getWorkspaceActivePaseoBrowserWebContents,
   getWorkspaceActivePaseoBrowserId,
   getPaseoBrowserWorkspaceId,
-} from "../browser-webviews.js";
+} from "../browser-webviews/index.js";
 
 const MAX_CONSOLE_MESSAGES_PER_TAB = 200;
 const consoleMessagesByContentsId = new Map<number, BrowserAutomationConsoleLogEntry[]>();

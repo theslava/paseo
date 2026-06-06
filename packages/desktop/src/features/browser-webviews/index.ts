@@ -1,4 +1,11 @@
 import { webContents as allWebContents, type WebContents } from "electron";
+import {
+  BROWSER_NEW_TAB_REQUEST_EVENT,
+  handleBrowserWindowOpenRequest,
+  isAllowedBrowserWebviewUrl,
+} from "./window-open.js";
+
+export { BROWSER_NEW_TAB_REQUEST_EVENT, handleBrowserWindowOpenRequest };
 
 const browserIdsByWebContentsId = new Map<number, string>();
 const workspaceIdsByBrowserId = new Map<string, string>();
@@ -7,6 +14,25 @@ const activeBrowserIdsByWorkspaceId = new Map<string, string>();
 export interface BrowserWorkspaceRegistration {
   browserId: string;
   workspaceId: string;
+}
+
+function getBrowserIdFromWebviewPartition(partition: string | undefined): string | null {
+  const prefix = "persist:paseo-browser-";
+  if (!partition?.startsWith(prefix)) {
+    return null;
+  }
+  const browserId = partition.slice(prefix.length).trim();
+  return browserId.length > 0 ? browserId : null;
+}
+
+export function readBrowserIdFromWebviewAttach(input: {
+  src?: string;
+  partition?: string;
+}): string | null {
+  if (!isAllowedBrowserWebviewUrl(input.src)) {
+    return null;
+  }
+  return getBrowserIdFromWebviewPartition(input.partition);
 }
 
 export function listRegisteredPaseoBrowserIds(): string[] {
@@ -87,4 +113,25 @@ export function getMostRecentWorkspaceActivePaseoBrowserWebContents(): WebConten
   const activeBrowserIds = Array.from(activeBrowserIdsByWorkspaceId.values());
   const browserId = activeBrowserIds.at(-1);
   return browserId ? getPaseoBrowserWebContents(browserId) : null;
+}
+
+function preventUnsafeBrowserWebviewNavigation(
+  event: { preventDefault: () => void },
+  url: string | undefined,
+): void {
+  if (!isAllowedBrowserWebviewUrl(url)) {
+    event.preventDefault();
+  }
+}
+
+export function registerBrowserWebviewNavigationGuards(contents: WebContents): void {
+  contents.on("will-navigate", (event) => {
+    preventUnsafeBrowserWebviewNavigation(event, event.url);
+  });
+  contents.on("will-frame-navigate", (event) => {
+    preventUnsafeBrowserWebviewNavigation(event, event.url);
+  });
+  contents.on("will-redirect", (event) => {
+    preventUnsafeBrowserWebviewNavigation(event, event.url);
+  });
 }
