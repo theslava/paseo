@@ -15,6 +15,6 @@ export function buildSidebarProjectRowModel(input: {
   return {
     kind: "project_section",
     chevron: input.collapsed ? "expand" : "collapse",
-    trailingAction: input.project.canCreateWorktree ? "new_worktree" : "none",
+    trailingAction: input.project.hosts.some((h) => h.canCreateWorktree) ? "new_worktree" : "none",
   };
 }

@@ -15,6 +15,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import {
+  createContext,
   memo,
   useCallback,
   useMemo,
@@ -55,7 +56,7 @@ import {
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { DraggableList, type DraggableRenderItemInfo } from "./draggable-list";
 import type { DraggableListDragHandleProps } from "./draggable-list.types";
-import { getHostRuntimeStore } from "@/runtime/host-runtime";
+import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProjectIconDataByProjectKey } from "@/projects/project-icons";
 import {
@@ -2045,6 +2046,9 @@ function areProjectBlockSelectionsEqual(
   );
 }
 
+export const HostLabelMapContext = createContext<Map<string, string>>(new Map());
+export const MultiHostProjectKeysContext = createContext<Set<string>>(new Set());
+
 const MemoProjectBlock = memo(ProjectBlock, areProjectBlockPropsEqual);
 
 export function SidebarWorkspaceList({
@@ -2062,31 +2066,55 @@ export function SidebarWorkspaceList({
   parentGestureRef,
 }: SidebarWorkspaceListProps) {
   const pathname = usePathname();
+  const hosts = useHosts();
 
-  if (groupMode === "status") {
-    return (
+  const hostLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const host of hosts) {
+      map.set(host.serverId, host.label?.trim() || host.serverId);
+    }
+    return map;
+  }, [hosts]);
+
+  const multiHostProjectKeys = useMemo(() => {
+    const result = new Set<string>();
+    for (const project of projects) {
+      if (project.hosts.length > 1) {
+        result.add(project.projectKey);
+      }
+    }
+    return result;
+  }, [projects]);
+
+  const content =
+    groupMode === "status" ? (
       <SidebarStatusModeWrapper
         serverId={serverId}
         projects={projects}
         shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
         onWorkspacePress={onWorkspacePress}
       />
+    ) : (
+      <ProjectModeList
+        projects={projects}
+        serverId={serverId}
+        collapsedProjectKeys={collapsedProjectKeys}
+        onToggleProjectCollapsed={onToggleProjectCollapsed}
+        shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+        onWorkspacePress={onWorkspacePress}
+        onAddProject={onAddProject}
+        listFooterComponent={listFooterComponent}
+        parentGestureRef={parentGestureRef}
+        pathname={pathname}
+      />
     );
-  }
 
   return (
-    <ProjectModeList
-      projects={projects}
-      serverId={serverId}
-      collapsedProjectKeys={collapsedProjectKeys}
-      onToggleProjectCollapsed={onToggleProjectCollapsed}
-      shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-      onWorkspacePress={onWorkspacePress}
-      onAddProject={onAddProject}
-      listFooterComponent={listFooterComponent}
-      parentGestureRef={parentGestureRef}
-      pathname={pathname}
-    />
+    <HostLabelMapContext.Provider value={hostLabelMap}>
+      <MultiHostProjectKeysContext.Provider value={multiHostProjectKeys}>
+        {content}
+      </MultiHostProjectKeysContext.Provider>
+    </HostLabelMapContext.Provider>
   );
 }
 
@@ -2101,11 +2129,21 @@ function SidebarStatusModeWrapper({
   shortcutIndexByWorkspaceKey: Map<string, number>;
   onWorkspacePress?: () => void;
 }) {
+  const serverIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const project of projects) {
+      for (const workspace of project.workspaces) {
+        ids.add(workspace.serverId);
+      }
+    }
+    return Array.from(ids);
+  }, [projects]);
+
   const hydratedWorkspaces = useStatusModeWorkspaceEntries({
-    serverId,
+    serverIds,
     projects,
   });
-  const projectNamesByKey = useProjectNamesMap(serverId);
+  const projectNamesByKey = useProjectNamesMap(serverIds);
   const showShortcutBadges = useShowShortcutBadges();
 
   return (
@@ -2222,12 +2260,8 @@ function ProjectModeList({
 
   const handleProjectDragEnd = useCallback(
     (reorderedProjects: SidebarProjectEntry[]) => {
-      if (!serverId) {
-        return;
-      }
-
       const reorderedProjectKeys = reorderedProjects.map((project) => project.projectKey);
-      const currentProjectOrder = getProjectOrder(serverId);
+      const currentProjectOrder = getProjectOrder();
       if (
         !hasVisibleOrderChanged({
           currentOrder: currentProjectOrder,
@@ -2238,24 +2272,19 @@ function ProjectModeList({
       }
 
       setProjectOrder(
-        serverId,
         mergeWithRemainder({
           currentOrder: currentProjectOrder,
           reorderedVisibleKeys: reorderedProjectKeys,
         }),
       );
     },
-    [getProjectOrder, serverId, setProjectOrder],
+    [getProjectOrder, setProjectOrder],
   );
 
   const handleWorkspaceReorder = useCallback(
     (projectKey: string, reorderedWorkspaces: SidebarWorkspaceEntry[]) => {
-      if (!serverId) {
-        return;
-      }
-
       const reorderedWorkspaceKeys = reorderedWorkspaces.map((workspace) => workspace.workspaceKey);
-      const currentWorkspaceOrder = getWorkspaceOrder(serverId, projectKey);
+      const currentWorkspaceOrder = getWorkspaceOrder(projectKey);
       if (
         !hasVisibleOrderChanged({
           currentOrder: currentWorkspaceOrder,
@@ -2266,7 +2295,6 @@ function ProjectModeList({
       }
 
       setWorkspaceOrder(
-        serverId,
         projectKey,
         mergeWithRemainder({
           currentOrder: currentWorkspaceOrder,
@@ -2274,7 +2302,7 @@ function ProjectModeList({
         }),
       );
     },
-    [getWorkspaceOrder, serverId, setWorkspaceOrder],
+    [getWorkspaceOrder, setWorkspaceOrder],
   );
 
   const handleWorktreeCreated = useCallback((workspaceId: string) => {
