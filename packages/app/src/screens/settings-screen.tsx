@@ -883,7 +883,6 @@ function HostPicker({
   onSelectHost,
   onAddHost,
 }: HostPickerProps) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<View | null>(null);

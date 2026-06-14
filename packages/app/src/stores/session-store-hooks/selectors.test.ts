@@ -222,7 +222,10 @@ describe("workspace structure composition", () => {
     useSessionStore.getState().mergeWorkspaces(SERVER_ID, [workspaceB]);
     const afterAdd = tracked.current;
     expect(afterAdd).not.toBe(before);
-    expect(afterAdd[0]?.workspaceKeys).toEqual(["workspace-a", "workspace-b"]);
+    expect(afterAdd[0]?.workspaceKeys).toEqual([
+      "test-server:workspace-a",
+      "test-server:workspace-b",
+    ]);
 
     useSessionStore.getState().mergeWorkspaces(SERVER_ID, [{ ...workspaceA, status: "running" }]);
     expect(tracked.current).toBe(afterAdd);
@@ -243,7 +246,7 @@ describe("workspace structure composition", () => {
       },
     ]);
 
-    const projects = selectWorkspaceStructureProjects(useSessionStore.getState(), SERVER_ID);
+    const projects = selectWorkspaceStructureProjects(useSessionStore.getState(), [SERVER_ID]);
     expect(projects).toEqual([
       expect.objectContaining({
         projectKey: "empty-project",

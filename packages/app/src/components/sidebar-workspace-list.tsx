@@ -1941,6 +1941,7 @@ function ProjectBlock({
           if (failures.length > 0) {
             toast.error(t("sidebar.project.toasts.removeFailed"));
           }
+          return null;
         })
         .catch((error) => {
           toast.error(

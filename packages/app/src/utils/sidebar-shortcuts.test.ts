@@ -146,7 +146,10 @@ describe("buildSidebarShortcutModel", () => {
       }),
     ]);
     directoryProject.projectKind = "directory";
-    directoryProject.canCreateWorktree = false;
+    directoryProject.hosts = directoryProject.hosts.map((host) => ({
+      ...host,
+      canCreateWorktree: false,
+    }));
 
     const model = buildSidebarShortcutModel({
       projects: [gitProject, directoryProject],

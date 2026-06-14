@@ -84,12 +84,6 @@ function projectNameForWorkspace(workspace: WorkspaceDescriptor, projectKey: str
   );
 }
 
-function workspaceNameFromDirectory(directory: string): string {
-  const trimmed = directory.trim().replace(/[\\/]+$/g, "");
-  const separator = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  return separator >= 0 ? trimmed.slice(separator + 1) : trimmed;
-}
-
 function normalizeCurrentBranch(currentBranch: string | null | undefined): string | null {
   if (!currentBranch) {
     return null;
@@ -237,7 +231,7 @@ function createStructuralWorkspaceEntry(input: {
     workspaceDirectory: undefined,
     projectKind: input.project.projectKind,
     workspaceKind: "checkout",
-    name: workspaceNameFromDirectory(input.project.iconWorkingDir) || input.workspaceId,
+    name: workspaceId,
   };
 }
 
