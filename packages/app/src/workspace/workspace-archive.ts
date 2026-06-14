@@ -8,6 +8,7 @@ import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 export interface WorkspaceArchiveTarget {
   serverId: string;
   workspaceId: string;
+  workspaceDirectory?: string | null;
 }
 
 interface WorkspaceArchiveClient {
@@ -19,6 +20,7 @@ interface OptimisticWorkspaceArchiveSnapshot {
 }
 
 export interface WorkspaceArchiveFailure {
+  serverId: string;
   workspaceId: string;
   error: unknown;
 }
@@ -27,6 +29,8 @@ function isWorkspaceArchiveFailure(error: unknown): error is WorkspaceArchiveFai
   return (
     typeof error === "object" &&
     error !== null &&
+    "serverId" in error &&
+    typeof error.serverId === "string" &&
     "workspaceId" in error &&
     typeof error.workspaceId === "string" &&
     "error" in error
@@ -45,6 +49,7 @@ function hideWorkspaceOptimistically(
   markWorkspaceArchivePending({
     serverId: workspace.serverId,
     workspaceId: workspace.workspaceId,
+    workspaceDirectory: workspace.workspaceDirectory,
   });
   useSessionStore.getState().removeWorkspace(workspace.serverId, workspace.workspaceId);
   return { workspace: snapshot };
@@ -98,18 +103,31 @@ export async function archiveWorkspaceOptimistically(input: {
 }
 
 export async function archiveWorkspacesOptimistically(input: {
-  client: WorkspaceArchiveClient;
+  getClient: (serverId: string) => WorkspaceArchiveClient | null;
   workspaces: WorkspaceArchiveTarget[];
 }): Promise<WorkspaceArchiveFailure[]> {
   const results = await Promise.allSettled(
     input.workspaces.map(async (workspace) => {
+      const client = input.getClient(workspace.serverId);
+      if (!client) {
+        throw {
+          serverId: workspace.serverId,
+          workspaceId: workspace.workspaceId,
+          error: new Error("Host is not connected"),
+        } satisfies WorkspaceArchiveFailure;
+      }
+
       try {
         await archiveWorkspaceOptimistically({
-          client: input.client,
+          client,
           workspace,
         });
       } catch (error) {
-        throw { workspaceId: workspace.workspaceId, error } satisfies WorkspaceArchiveFailure;
+        throw {
+          serverId: workspace.serverId,
+          workspaceId: workspace.workspaceId,
+          error,
+        } satisfies WorkspaceArchiveFailure;
       }
     }),
   );

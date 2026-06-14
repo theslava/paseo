@@ -13,6 +13,7 @@ import { Composer } from "@/composer";
 import { DraftAgentModeControl } from "@/composer/agent-controls/mode-control";
 import { splitComposerAttachmentsForSubmit } from "@/composer/attachments/submit";
 import { FileDropZone } from "@/components/file-drop-zone";
+import { HostStatusDot } from "@/components/host-status-dot";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { Combobox, ComboboxItem } from "@/components/ui/combobox";
 import type { ComboboxOption as ComboboxOptionType } from "@/components/ui/combobox";
@@ -25,12 +26,7 @@ import { HEADER_INNER_HEIGHT, MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "
 import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useGithubSearchQuery } from "@/git/use-github-search-query";
-import {
-  useHostRuntimeClient,
-  useHostRuntimeIsConnected,
-  useHostRuntimeSnapshot,
-  useHosts,
-} from "@/runtime/host-runtime";
+import { useHostRuntimeClient, useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import {
   navigateToWorkspace,
   useLastWorkspaceSelection,
@@ -477,18 +473,6 @@ function ProjectOptionItem({
       leadingSlot={leadingSlot}
     />
   );
-}
-
-function HostStatusDot({ serverId }: { serverId: string }) {
-  const { theme } = useUnistyles();
-  const snapshot = useHostRuntimeSnapshot(serverId);
-  const status = snapshot?.connectionStatus ?? "connecting";
-  let color: string;
-  if (status === "online") color = theme.colors.palette.green[400];
-  else if (status === "connecting") color = theme.colors.palette.amber[500];
-  else color = theme.colors.palette.red[500];
-  const dotStyle = useMemo(() => [styles.hostStatusDot, { backgroundColor: color }], [color]);
-  return <View style={dotStyle} />;
 }
 
 function HostPickerTrigger({
@@ -1206,9 +1190,24 @@ export function NewWorkspaceScreen({
     return hostPlacement?.iconWorkingDir ?? null;
   }, [selectedProject, selectedServerId]);
 
+  const projectIconTargets = useMemo(
+    () =>
+      projects.flatMap((project) => {
+        const hostPlacement =
+          project.hosts.find((host) => host.serverId === selectedServerId) ?? project.hosts[0];
+        const iconWorkingDir = (hostPlacement?.iconWorkingDir ?? project.iconWorkingDir).trim();
+        if (!hostPlacement || !iconWorkingDir) {
+          return [];
+        }
+        return [
+          { projectKey: project.projectKey, serverId: hostPlacement.serverId, iconWorkingDir },
+        ];
+      }),
+    [projects, selectedServerId],
+  );
+
   const projectIconDataByProjectKey = useProjectIconDataByProjectKey({
-    serverId: selectedServerId,
-    projects,
+    projects: projectIconTargets,
   });
   const draftKey = `new-workspace:${selectedServerId}:${selectedSourceDirectory ?? "choose-project"}`;
   const chatDraft = useAgentInputDraft({
