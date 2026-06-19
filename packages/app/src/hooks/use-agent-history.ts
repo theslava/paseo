@@ -15,12 +15,14 @@ const AGENT_HISTORY_PAGE_LIMIT = 200;
 const AGENT_HISTORY_SORT: NonNullable<FetchAgentHistoryOptions["sort"]> = [
   { key: "updated_at", direction: "desc" },
 ];
+const AGENT_HISTORY_ALL_HOSTS_FAILED_MESSAGE = "No connected hosts could load agent history";
 
 export interface AgentHistoryResult {
   agents: AggregatedAgent[];
   isLoading: boolean;
   isInitialLoad: boolean;
   isRevalidating: boolean;
+  isError: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
   refreshAll: () => Promise<void>;
@@ -115,7 +117,7 @@ export async function fetchAgentHistoryBatch(input: {
     ? input.hosts.filter((host) => Object.hasOwn(cursorByServerId, host.serverId))
     : input.hosts;
 
-  const pages = await Promise.all(
+  const settledPages = await Promise.allSettled(
     hostsToFetch.map(async (host) => {
       const page = await fetchAgentHistoryPage({
         client: host.client,
@@ -125,6 +127,12 @@ export async function fetchAgentHistoryBatch(input: {
       return { host, page };
     }),
   );
+  const pages = settledPages.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : [],
+  );
+  if (pages.length === 0) {
+    throw new Error(AGENT_HISTORY_ALL_HOSTS_FAILED_MESSAGE);
+  }
 
   const agents = pages.flatMap(({ host, page }) =>
     page.agents.map((agent) => Object.assign({}, agent, { serverLabel: host.serverLabel })),
@@ -209,8 +217,16 @@ export function useAgentHistory(options: {
       });
     },
   });
-  const { data, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, isLoading, refetch } =
-    historyQuery;
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isError,
+    isFetching,
+    isFetchingNextPage,
+    isLoading,
+    refetch,
+  } = historyQuery;
 
   const refreshAll = useCallback(async () => {
     if (!enabled || targetHosts.length === 0) {
@@ -243,6 +259,7 @@ export function useAgentHistory(options: {
     isLoading,
     isInitialLoad,
     isRevalidating,
+    isError,
     hasMore: hasNextPage,
     isLoadingMore: isFetchingNextPage,
     refreshAll,

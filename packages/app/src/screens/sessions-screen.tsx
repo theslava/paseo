@@ -151,9 +151,10 @@ function SessionsScreenContent() {
   );
   const [selectedHost, setSelectedHost] = useState(ALL_HOSTS_FILTER_VALUE);
   const historyServerId = selectedHost === ALL_HOSTS_FILTER_VALUE ? null : selectedHost;
-  const { agents, hasMore, isInitialLoad, isLoadingMore, loadMore, refreshAll } = useAgentHistory({
-    serverId: historyServerId,
-  });
+  const { agents, hasMore, isInitialLoad, isLoadingMore, isError, loadMore, refreshAll } =
+    useAgentHistory({
+      serverId: historyServerId,
+    });
 
   useEffect(() => {
     if (
@@ -178,6 +179,7 @@ function SessionsScreenContent() {
   const emptyText =
     selectedHost === ALL_HOSTS_FILTER_VALUE ? "No sessions yet" : "No sessions for this host";
   const showHostFilter = orderedHosts.length > 1;
+  const showLoadError = isError && sortedAgents.length === 0;
 
   const handleBack = useCallback(() => {
     router.navigate(buildOpenProjectRoute());
@@ -212,7 +214,15 @@ function SessionsScreenContent() {
           <LoadingSpinner size="large" color={theme.colors.foregroundMuted} />
         </View>
       ) : null}
-      {!isInitialLoad && sortedAgents.length === 0 ? (
+      {!isInitialLoad && showLoadError ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Unable to load sessions</Text>
+          <Button variant="ghost" onPress={handleRefresh}>
+            Try again
+          </Button>
+        </View>
+      ) : null}
+      {!isInitialLoad && !showLoadError && sortedAgents.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>{emptyText}</Text>
           <Button variant="ghost" leftIcon={ChevronLeft} onPress={handleBack}>
@@ -220,7 +230,7 @@ function SessionsScreenContent() {
           </Button>
         </View>
       ) : null}
-      {!isInitialLoad && sortedAgents.length > 0 ? (
+      {!isInitialLoad && !showLoadError && sortedAgents.length > 0 ? (
         <AgentList
           agents={sortedAgents}
           showCheckoutInfo={false}
