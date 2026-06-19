@@ -7,8 +7,9 @@ import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-stor
 import { selectWorkspace, workspaceEqualityFns } from "@/stores/session-store-hooks/selectors";
 import { useHostProjects } from "@/projects/host-projects";
 import { fetchAllWorkspaceDescriptors } from "@/projects/workspace-fetching";
-import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
+import { getHostRuntimeStore, useHostRegistryLoaded, useHosts } from "@/runtime/host-runtime";
 import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
+import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { shouldSuppressWorkspaceForLocalArchive } from "@/contexts/session-workspace-upserts";
 import {
   buildSidebarWorkspacePlacementModel,
@@ -92,17 +93,29 @@ export function useSidebarWorkspacesList(options?: {
 }): SidebarWorkspacesListResult {
   const runtime = getHostRuntimeStore();
   const allHosts = useHosts();
+  const hostRegistryLoaded = useHostRegistryLoaded();
   const allServerIds = useMemo(() => allHosts.map((h) => h.serverId), [allHosts]);
 
   const hostFilter = options?.hostFilter ?? null;
+  const reconcileHostFilter = useSidebarViewStore((state) => state.reconcileHostFilter);
+  const hasHostFilterMatch = hostFilter ? allServerIds.includes(hostFilter) : false;
+  const effectiveHostFilter =
+    hostFilter && (!hostRegistryLoaded || hasHostFilterMatch) ? hostFilter : null;
   const isActive = options?.enabled !== false;
 
   const serverIds = useMemo(() => {
-    if (hostFilter) {
-      return allServerIds.filter((id) => id === hostFilter);
+    if (effectiveHostFilter) {
+      return allServerIds.filter((id) => id === effectiveHostFilter);
     }
     return allServerIds;
-  }, [allServerIds, hostFilter]);
+  }, [allServerIds, effectiveHostFilter]);
+
+  useEffect(() => {
+    if (!hostRegistryLoaded) {
+      return;
+    }
+    reconcileHostFilter(allServerIds);
+  }, [allServerIds, hostRegistryLoaded, reconcileHostFilter]);
 
   const persistedProjectOrder = useSidebarOrderStore((state) => state.projectOrder ?? EMPTY_ORDER);
 

@@ -9,6 +9,7 @@ interface SidebarViewStoreState {
   hostFilter: string | null;
   setGroupMode: (mode: SidebarGroupMode) => void;
   setHostFilter: (serverId: string | null) => void;
+  reconcileHostFilter: (serverIds: readonly string[]) => void;
 }
 
 export const useSidebarViewStore = create<SidebarViewStoreState>()(
@@ -18,6 +19,13 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
       hostFilter: null,
       setGroupMode: (mode) => set({ groupMode: mode }),
       setHostFilter: (serverId) => set({ hostFilter: serverId }),
+      reconcileHostFilter: (serverIds) =>
+        set((state) => {
+          if (!state.hostFilter || serverIds.includes(state.hostFilter)) {
+            return state;
+          }
+          return { hostFilter: null };
+        }),
     }),
     {
       name: "sidebar-view",
