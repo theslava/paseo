@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   DaemonClient,
   FetchAgentHistoryEntry,
@@ -10,6 +10,11 @@ import {
   fetchAgentHistoryBatch,
   fetchAgentHistoryPage,
 } from "./use-agent-history";
+import { allAgentHistoryQueryKey } from "./agent-history-query-key";
+
+vi.hoisted(() => {
+  (globalThis as unknown as { __DEV__: boolean }).__DEV__ = false;
+});
 
 type FetchAgentHistory = DaemonClient["fetchAgentHistory"];
 type FetchAgentHistoryResult = Awaited<ReturnType<FetchAgentHistory>>;
@@ -110,6 +115,12 @@ function historyEntry(input: {
 }
 
 describe("fetchAgentHistoryPage", () => {
+  it("builds the all-host query key independent of host order", () => {
+    expect(allAgentHistoryQueryKey(["server-b", "server-a"])).toEqual(
+      allAgentHistoryQueryKey(["server-a", "server-b"]),
+    );
+  });
+
   it("requests the first page with the default limit and updated_at descending sort", async () => {
     const client = createClient([
       historyPayload({

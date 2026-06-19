@@ -67,15 +67,21 @@ export const useSidebarOrderStore = create<SidebarOrderStoreState>()(
         projectOrder: state.projectOrder,
         workspaceOrderByProject: state.workspaceOrderByProject,
       }),
+      version: 1,
       migrate: (persistedState: unknown) => {
         const state = persistedState as
           | {
+              projectOrder?: string[];
+              workspaceOrderByProject?: Record<string, string[]>;
               projectOrderByServerId?: Record<string, string[]>;
               workspaceOrderByServerAndProject?: Record<string, string[]>;
             }
           | undefined;
 
         if (!state) return persistedState as SidebarOrderStoreState;
+        if (!state.projectOrderByServerId && !state.workspaceOrderByServerAndProject) {
+          return persistedState as SidebarOrderStoreState;
+        }
 
         const projectOrder: string[] = [];
         const seenProjects = new Set<string>();

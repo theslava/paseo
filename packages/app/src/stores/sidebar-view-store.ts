@@ -26,17 +26,6 @@ export const useSidebarViewStore = create<SidebarViewStoreState>()(
         groupMode: state.groupMode,
         hostFilter: state.hostFilter,
       }),
-      migrate: (persistedState: unknown) => {
-        const state = persistedState as
-          | { groupModeByServerId?: Record<string, SidebarGroupMode> }
-          | undefined;
-        if (state?.groupModeByServerId) {
-          const values = Object.values(state.groupModeByServerId);
-          const mode = values.length > 0 ? values[0] : "project";
-          return { groupMode: mode, hostFilter: null };
-        }
-        return persistedState as SidebarViewStoreState;
-      },
     },
   ),
 );

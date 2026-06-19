@@ -9,5 +9,5 @@ export function allAgentHistoryQueryRootKey() {
 }
 
 export function allAgentHistoryQueryKey(serverIds: readonly string[]) {
-  return [...ALL_AGENT_HISTORY_QUERY_ROOT, ...serverIds] as const;
+  return [...ALL_AGENT_HISTORY_QUERY_ROOT, ...[...serverIds].sort()] as const;
 }

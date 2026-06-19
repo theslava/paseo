@@ -150,8 +150,9 @@ function SessionsScreenContent() {
     [hosts, localServerId],
   );
   const [selectedHost, setSelectedHost] = useState(ALL_HOSTS_FILTER_VALUE);
+  const historyServerId = selectedHost === ALL_HOSTS_FILTER_VALUE ? null : selectedHost;
   const { agents, hasMore, isInitialLoad, isLoadingMore, isRevalidating, loadMore, refreshAll } =
-    useAgentHistory({});
+    useAgentHistory({ serverId: historyServerId });
 
   useEffect(() => {
     if (
