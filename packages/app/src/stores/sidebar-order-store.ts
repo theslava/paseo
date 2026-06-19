@@ -11,6 +11,18 @@ interface SidebarOrderStoreState {
   setWorkspaceOrder: (projectKey: string, keys: string[]) => void;
 }
 
+interface SidebarOrderPersistedState {
+  projectOrder?: string[];
+  workspaceOrderByProject?: Record<string, string[]>;
+  projectOrderByServerId?: Record<string, string[]>;
+  workspaceOrderByServerAndProject?: Record<string, string[]>;
+}
+
+interface SidebarWorkspaceOrderScope {
+  serverId: string;
+  projectKey: string;
+}
+
 function normalizeKeys(keys: string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
@@ -27,10 +39,71 @@ function normalizeKeys(keys: string[]): string[] {
   return normalized;
 }
 
-function extractProjectKeyFromScope(scopeKey: string): string | null {
+function normalizeWorkspaceOrderByProject(
+  workspaceOrderByProject: Record<string, string[]> | undefined,
+): Record<string, string[]> {
+  const normalized: Record<string, string[]> = {};
+  for (const [projectKey, order] of Object.entries(workspaceOrderByProject ?? {})) {
+    const scope = projectKey.trim();
+    if (!scope) continue;
+    normalized[scope] = normalizeKeys(order);
+  }
+  return normalized;
+}
+
+function extractWorkspaceOrderScope(scopeKey: string): SidebarWorkspaceOrderScope | null {
   const separatorIndex = scopeKey.indexOf("::");
   if (separatorIndex < 0) return null;
-  return scopeKey.slice(separatorIndex + 2).trim();
+  const serverId = scopeKey.slice(0, separatorIndex).trim();
+  const projectKey = scopeKey.slice(separatorIndex + 2).trim();
+  if (!serverId || !projectKey) return null;
+  return { serverId, projectKey };
+}
+
+function normalizeLegacyWorkspaceKey(serverId: string, rawWorkspaceKey: string): string | null {
+  const workspaceKey = rawWorkspaceKey.trim();
+  if (!workspaceKey) return null;
+  const serverPrefix = `${serverId}:`;
+  return workspaceKey.startsWith(serverPrefix) ? workspaceKey : `${serverPrefix}${workspaceKey}`;
+}
+
+export function migrateSidebarOrderState(persistedState: unknown): {
+  projectOrder: string[];
+  workspaceOrderByProject: Record<string, string[]>;
+} {
+  const state = persistedState as SidebarOrderPersistedState | undefined;
+
+  if (!state) {
+    return { projectOrder: [], workspaceOrderByProject: {} };
+  }
+
+  const projectOrder = normalizeKeys(state.projectOrder ?? []);
+  const seenProjects = new Set(projectOrder);
+  for (const keys of Object.values(state.projectOrderByServerId ?? {})) {
+    for (const key of normalizeKeys(keys)) {
+      if (seenProjects.has(key)) continue;
+      seenProjects.add(key);
+      projectOrder.push(key);
+    }
+  }
+
+  const workspaceOrderByProject = normalizeWorkspaceOrderByProject(state.workspaceOrderByProject);
+  for (const [scopeKey, order] of Object.entries(state.workspaceOrderByServerAndProject ?? {})) {
+    const scope = extractWorkspaceOrderScope(scopeKey);
+    if (!scope) continue;
+    const existing = workspaceOrderByProject[scope.projectKey] ?? [];
+    const merged = [...existing];
+    const seen = new Set(merged);
+    for (const key of order) {
+      const workspaceKey = normalizeLegacyWorkspaceKey(scope.serverId, key);
+      if (!workspaceKey || seen.has(workspaceKey)) continue;
+      seen.add(workspaceKey);
+      merged.push(workspaceKey);
+    }
+    workspaceOrderByProject[scope.projectKey] = merged;
+  }
+
+  return { projectOrder, workspaceOrderByProject };
 }
 
 export const useSidebarOrderStore = create<SidebarOrderStoreState>()(
@@ -68,52 +141,7 @@ export const useSidebarOrderStore = create<SidebarOrderStoreState>()(
         workspaceOrderByProject: state.workspaceOrderByProject,
       }),
       version: 1,
-      migrate: (persistedState: unknown) => {
-        const state = persistedState as
-          | {
-              projectOrder?: string[];
-              workspaceOrderByProject?: Record<string, string[]>;
-              projectOrderByServerId?: Record<string, string[]>;
-              workspaceOrderByServerAndProject?: Record<string, string[]>;
-            }
-          | undefined;
-
-        if (!state) return persistedState as SidebarOrderStoreState;
-        if (!state.projectOrderByServerId && !state.workspaceOrderByServerAndProject) {
-          return persistedState as SidebarOrderStoreState;
-        }
-
-        const projectOrder: string[] = [];
-        const seenProjects = new Set<string>();
-        for (const keys of Object.values(state.projectOrderByServerId ?? {})) {
-          for (const key of keys) {
-            if (!seenProjects.has(key)) {
-              seenProjects.add(key);
-              projectOrder.push(key);
-            }
-          }
-        }
-
-        const workspaceOrderByProject: Record<string, string[]> = {};
-        for (const [scopeKey, order] of Object.entries(
-          state.workspaceOrderByServerAndProject ?? {},
-        )) {
-          const projectKey = extractProjectKeyFromScope(scopeKey);
-          if (!projectKey) continue;
-          const existing = workspaceOrderByProject[projectKey] ?? [];
-          const merged = [...existing];
-          const seen = new Set(merged);
-          for (const key of order) {
-            if (!seen.has(key)) {
-              seen.add(key);
-              merged.push(key);
-            }
-          }
-          workspaceOrderByProject[projectKey] = merged;
-        }
-
-        return { projectOrder, workspaceOrderByProject } as SidebarOrderStoreState;
-      },
+      migrate: migrateSidebarOrderState,
     },
   ),
 );

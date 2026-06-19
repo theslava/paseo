@@ -212,26 +212,63 @@ function createStructuralWorkspaceEntry(input: {
   project: HostProjectListItem;
   workspaceKey: string;
 }): SidebarWorkspacePlacement {
-  const separatorIndex = input.workspaceKey.indexOf(":");
-  const serverId =
-    separatorIndex > 0
-      ? input.workspaceKey.slice(0, separatorIndex)
-      : (input.project.hosts[0]?.serverId ?? input.workspaceKey);
-  const workspaceId =
-    separatorIndex > 0 ? input.workspaceKey.slice(separatorIndex + 1) : input.workspaceKey;
-  const workspaceKey = separatorIndex > 0 ? input.workspaceKey : `${serverId}:${workspaceId}`;
+  const identity = resolveStructuralWorkspaceIdentity({
+    project: input.project,
+    workspaceKey: input.workspaceKey,
+  });
 
   return {
-    workspaceKey,
-    serverId,
-    workspaceId,
+    workspaceKey: identity.workspaceKey,
+    serverId: identity.serverId,
+    workspaceId: identity.workspaceId,
     projectKey: input.project.projectKey,
     projectName: input.project.projectName,
     projectRootPath: input.project.iconWorkingDir,
     workspaceDirectory: undefined,
     projectKind: input.project.projectKind,
     workspaceKind: "checkout",
-    name: workspaceId,
+    name: identity.workspaceId,
+  };
+}
+
+function resolveStructuralWorkspaceIdentity(input: {
+  project: HostProjectListItem;
+  workspaceKey: string;
+}): {
+  workspaceKey: string;
+  serverId: string;
+  workspaceId: string;
+} {
+  const hostsByLongestPrefix = [...input.project.hosts].sort(
+    (left, right) => right.serverId.length - left.serverId.length,
+  );
+
+  for (const host of hostsByLongestPrefix) {
+    const prefix = `${host.serverId}:`;
+    if (!input.workspaceKey.startsWith(prefix)) continue;
+    const workspaceId = input.workspaceKey.slice(prefix.length);
+    if (!workspaceId) continue;
+    return {
+      workspaceKey: input.workspaceKey,
+      serverId: host.serverId,
+      workspaceId,
+    };
+  }
+
+  const separatorIndex = input.workspaceKey.indexOf(":");
+  if (separatorIndex > 0) {
+    return {
+      workspaceKey: input.workspaceKey,
+      serverId: input.workspaceKey.slice(0, separatorIndex),
+      workspaceId: input.workspaceKey.slice(separatorIndex + 1),
+    };
+  }
+
+  const serverId = input.project.hosts[0]?.serverId ?? input.workspaceKey;
+  return {
+    workspaceKey: `${serverId}:${input.workspaceKey}`,
+    serverId,
+    workspaceId: input.workspaceKey,
   };
 }
 

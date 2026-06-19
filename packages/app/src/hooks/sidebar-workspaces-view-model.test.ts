@@ -183,6 +183,30 @@ describe("buildSidebarProjectsFromStructure", () => {
       "main",
     ]);
   });
+
+  it("resolves workspace keys by known host prefix when server ids contain colons", () => {
+    const projects = buildSidebarProjectsFromStructure({
+      projects: [
+        project({
+          projectKey: "project-1",
+          hosts: [
+            {
+              serverId: "relay:paseo-host",
+              iconWorkingDir: "/repo/project-1",
+              canCreateWorktree: true,
+            },
+          ],
+          workspaceKeys: ["relay:paseo-host:ws-main"],
+        }),
+      ],
+    });
+
+    expect(projects[0]?.workspaces[0]).toMatchObject({
+      workspaceKey: "relay:paseo-host:ws-main",
+      serverId: "relay:paseo-host",
+      workspaceId: "ws-main",
+    });
+  });
 });
 
 describe("shared sidebar workspace model", () => {
