@@ -1188,20 +1188,22 @@ describe("HostRuntimeStore", () => {
 
     try {
       let hostListNotifications = 0;
-      const unsubscribe = store.subscribeHostList(() => {
-        hostListNotifications += 1;
+      let unsubscribeHostList = () => {};
+      const registryLoaded = new Promise<void>((resolve) => {
+        unsubscribeHostList = store.subscribeHostList(() => {
+          hostListNotifications += 1;
+          if (store.isHostRegistryLoaded()) {
+            unsubscribeHostList();
+            resolve();
+          }
+        });
       });
 
       store.boot();
+      await registryLoaded;
 
-      const timeoutAt = Date.now() + 200;
-      while (!store.isHostRegistryLoaded() && Date.now() < timeoutAt) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-
-      unsubscribe();
       expect(store.isHostRegistryLoaded()).toBe(true);
-      expect(hostListNotifications).toBeGreaterThan(0);
+      expect(hostListNotifications).toBe(2);
     } finally {
       if (previousOverride === undefined) {
         delete process.env.EXPO_PUBLIC_LOCAL_DAEMON;

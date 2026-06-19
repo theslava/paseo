@@ -23,6 +23,11 @@ function extractSearch(pathname: string): string {
     : pathname.slice(queryIndex + 1);
 }
 
+function extractHash(pathname: string): string {
+  const hashIndex = pathname.indexOf("#");
+  return hashIndex >= 0 ? pathname.slice(hashIndex) : "";
+}
+
 function trimNonEmpty(value: NullableString): string | null {
   if (typeof value !== "string") {
     return null;
@@ -296,6 +301,38 @@ export function parseHostWorkspaceRouteFromPathname(
     return null;
   }
   return { serverId, workspaceId };
+}
+
+export function stripHostWorkspaceRouteEchoSearch(route: string): string {
+  const pathname = stripSearchAndHash(route);
+  const selection = parseHostWorkspaceRouteFromPathname(pathname);
+  const search = extractSearch(route);
+  if (!selection || !search) {
+    return route;
+  }
+
+  const params = new URLSearchParams(search);
+  let didStrip = false;
+
+  const serverId = params.get("serverId");
+  if (serverId && trimNonEmpty(decodeSegment(serverId)) === selection.serverId) {
+    params.delete("serverId");
+    didStrip = true;
+  }
+
+  const workspaceId = params.get("workspaceId");
+  if (workspaceId && decodeWorkspaceIdFromPathSegment(workspaceId) === selection.workspaceId) {
+    params.delete("workspaceId");
+    didStrip = true;
+  }
+
+  if (!didStrip) {
+    return route;
+  }
+
+  const nextSearch = params.toString();
+  const nextQuery = nextSearch ? `?${nextSearch}` : "";
+  return `${pathname}${nextQuery}${extractHash(route)}`;
 }
 
 export function buildHostWorkspaceRoute(serverId: string, workspaceId: string) {

@@ -4,6 +4,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { router } from "expo-router";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ChevronDown, ChevronLeft, Server } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -143,6 +144,7 @@ function SessionsHostFilter({
 
 function SessionsScreenContent() {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const hosts = useHosts();
   const localServerId = useLocalDaemonServerId();
   const orderedHosts = useMemo(
@@ -177,7 +179,7 @@ function SessionsScreenContent() {
   }, [agents]);
 
   const emptyText =
-    selectedHost === ALL_HOSTS_FILTER_VALUE ? "No sessions yet" : "No sessions for this host";
+    selectedHost === ALL_HOSTS_FILTER_VALUE ? t("sessions.empty") : "No sessions for this host";
   const showHostFilter = orderedHosts.length > 1;
   const showLoadError = isError && sortedAgents.length === 0;
 
@@ -190,16 +192,16 @@ function SessionsScreenContent() {
       hasMore ? (
         <View style={styles.footer}>
           <Button variant="ghost" onPress={loadMore} disabled={isLoadingMore}>
-            {isLoadingMore ? "Loading..." : "Load more"}
+            {isLoadingMore ? "Loading..." : t("sessions.actions.loadMore")}
           </Button>
         </View>
       ) : null,
-    [hasMore, loadMore, isLoadingMore],
+    [hasMore, loadMore, isLoadingMore, t],
   );
 
   return (
     <View style={styles.container}>
-      <MenuHeader title="Sessions" />
+      <MenuHeader title={t("sessions.title")} />
       {showHostFilter ? (
         <View style={styles.filterContainer}>
           <SessionsHostFilter

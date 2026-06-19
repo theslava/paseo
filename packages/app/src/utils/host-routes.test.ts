@@ -20,6 +20,7 @@ import {
   parseHostWorkspaceOpenIntentFromPathname,
   parseHostWorkspaceRouteFromPathname,
   parseWorkspaceOpenIntent,
+  stripHostWorkspaceRouteEchoSearch,
 } from "./host-routes";
 
 describe("parseHostAgentRouteFromPathname", () => {
@@ -124,6 +125,28 @@ describe("workspace route parsing", () => {
     expect(buildHostWorkspaceOpenRoute("local", "164", "draft:new")).toBe(
       "/h/local/workspace/164?open=draft%3Anew",
     );
+  });
+
+  it("strips route params repeated as workspace route search params", () => {
+    expect(
+      stripHostWorkspaceRouteEchoSearch(
+        "/h/local/workspace/164?serverId=local&workspaceId=164&open=agent%3Aagent-1#pane",
+      ),
+    ).toBe("/h/local/workspace/164?open=agent%3Aagent-1#pane");
+  });
+
+  it("keeps non-route workspace search params", () => {
+    expect(stripHostWorkspaceRouteEchoSearch("/h/local/workspace/164?workspaceId=other")).toBe(
+      "/h/local/workspace/164?workspaceId=other",
+    );
+  });
+
+  it("strips encoded workspace route echoes", () => {
+    expect(
+      stripHostWorkspaceRouteEchoSearch(
+        "/h/local/workspace/b64_L3RtcC9yZXBv?workspaceId=%2Ftmp%2Frepo",
+      ),
+    ).toBe("/h/local/workspace/b64_L3RtcC9yZXBv");
   });
 
   it("builds a global new workspace route without a source directory", () => {

@@ -118,7 +118,10 @@ import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-ar
 import { openExternalUrl } from "@/utils/open-external-url";
 import { requireWorkspaceDirectory, resolveWorkspaceDirectory } from "@/utils/workspace-directory";
 import { useWorkspaceArchive } from "@/workspace/use-workspace-archive";
-import { useSessionStore } from "@/stores/session-store";
+import {
+  getCurrentProjectRemoveReadiness,
+  removeProjectFromHosts,
+} from "@/projects/project-remove";
 import {
   isWeb as platformIsWeb,
   isNative as platformIsNative,
@@ -129,10 +132,6 @@ import { getDesktopHost } from "@/desktop/host";
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
 const projectKeyExtractor = (project: SidebarProjectEntry) => project.projectKey;
-
-function isRejectedPromiseResult(result: PromiseSettledResult<unknown>): boolean {
-  return result.status === "rejected";
-}
 
 const WORKSPACE_STATUS_DOT_WIDTH = 14;
 const DEFAULT_STATUS_DOT_SIZE = 7;
@@ -1937,28 +1936,27 @@ function ProjectBlock({
       }
 
       setIsRemovingProject(true);
-      const unsupportedHost = project.hosts.find(
-        (host) =>
-          useSessionStore.getState().sessions[host.serverId]?.serverInfo?.features
-            ?.projectRemove !== true,
-      );
-      if (unsupportedHost) {
+      const readiness = getCurrentProjectRemoveReadiness({
+        projectKey: project.projectKey,
+        hosts: project.hosts,
+      });
+      if (readiness.kind === "needs_host_update") {
         toast.error(t("sidebar.project.toasts.updateHostToRemove"));
         setIsRemovingProject(false);
         return;
       }
 
-      void Promise.allSettled(
-        project.hosts.map(async (host) => {
-          const client = getHostRuntimeStore().getClient(host.serverId);
-          if (!client) {
-            throw new Error(t("sidebar.project.toasts.hostDisconnected"));
+      void removeProjectFromHosts({
+        projectKey: project.projectKey,
+        targets: readiness.targets,
+        getClient: (serverId) => getHostRuntimeStore().getClient(serverId),
+      })
+        .then((outcome) => {
+          if (outcome.kind === "host_disconnected") {
+            toast.error(t("sidebar.project.toasts.hostDisconnected"));
+            return null;
           }
-          await client.removeProject(project.projectKey);
-        }),
-      )
-        .then((results) => {
-          if (results.some(isRejectedPromiseResult)) {
+          if (outcome.kind === "failed") {
             toast.error(t("sidebar.project.toasts.removeFailed"));
           }
           return null;
@@ -1972,7 +1970,7 @@ function ProjectBlock({
           setIsRemovingProject(false);
         });
     })();
-  }, [isRemovingProject, displayName, t, toast, project.hosts, project.projectKey]);
+  }, [isRemovingProject, displayName, t, toast, project.projectKey, project.hosts]);
 
   const handleToggleCollapsed = useCallback(() => {
     onToggleCollapsed(project.projectKey);
