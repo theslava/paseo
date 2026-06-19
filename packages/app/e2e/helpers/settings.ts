@@ -85,7 +85,7 @@ export async function toggleHostAdvanced(page: Page): Promise<void> {
 }
 
 export async function openCompactSettings(page: Page): Promise<void> {
-  await expect(page).toHaveURL(/\/h\/|\/welcome/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/h\/|\/open-project$|\/welcome/, { timeout: 15000 });
   await page.getByRole("button", { name: "Open menu", exact: true }).first().click();
   const settingsButton = page.locator('[data-testid="sidebar-settings"]:visible').first();
   await expect(settingsButton).toBeVisible();
