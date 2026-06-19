@@ -155,6 +155,7 @@ export function HostChooserModal() {
     () => requestHosts.filter((host) => matchesHostQuery(host, query)),
     [query, requestHosts],
   );
+  const activeOptionIndex = options.length === 0 ? 0 : Math.min(activeIndex, options.length - 1);
 
   useEffect(() => {
     if (!request) return;
@@ -164,12 +165,10 @@ export function HostChooserModal() {
     return () => clearTimeout(id);
   }, [request]);
 
-  useEffect(() => {
-    if (!request) return;
-    if (activeIndex >= options.length) {
-      setActiveIndex(options.length > 0 ? options.length - 1 : 0);
-    }
-  }, [activeIndex, options.length, request]);
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    setActiveIndex(0);
+  }, []);
 
   const chooseHost = useCallback(
     (serverId: string) => {
@@ -201,7 +200,7 @@ export function HostChooserModal() {
       }
 
       if (event.key === "Enter") {
-        const host = options[activeIndex];
+        const host = options[activeOptionIndex];
         if (!host) return;
         event.preventDefault();
         chooseHost(host.serverId);
@@ -210,17 +209,21 @@ export function HostChooserModal() {
 
       if (options.length === 0) return;
       event.preventDefault();
-      setActiveIndex((current) => {
-        const next = event.key === "ArrowDown" ? current + 1 : current - 1;
-        if (next < 0) return options.length - 1;
-        if (next >= options.length) return 0;
-        return next;
-      });
+      const next = event.key === "ArrowDown" ? activeOptionIndex + 1 : activeOptionIndex - 1;
+      if (next < 0) {
+        setActiveIndex(options.length - 1);
+        return;
+      }
+      if (next >= options.length) {
+        setActiveIndex(0);
+        return;
+      }
+      setActiveIndex(next);
     };
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [activeIndex, chooseHost, close, options, request]);
+  }, [activeOptionIndex, chooseHost, close, options, request]);
 
   if (!request) return null;
 
@@ -234,7 +237,7 @@ export function HostChooserModal() {
             <TextInput
               ref={inputRef}
               value={query}
-              onChangeText={setQuery}
+              onChangeText={handleQueryChange}
               placeholder="Search hosts..."
               placeholderTextColor={theme.colors.foregroundMuted}
               style={styles.input}
@@ -254,7 +257,7 @@ export function HostChooserModal() {
               <HostChooserRow
                 key={host.serverId}
                 host={host}
-                active={index === activeIndex}
+                active={index === activeOptionIndex}
                 onChooseHost={chooseHost}
               />
             ))}

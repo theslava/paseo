@@ -23,7 +23,7 @@ export interface AgentHistoryResult {
   isRevalidating: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
-  refreshAll: () => void;
+  refreshAll: () => Promise<void>;
   loadMore: () => void;
 }
 
@@ -212,11 +212,11 @@ export function useAgentHistory(options: {
   const { data, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, isLoading, refetch } =
     historyQuery;
 
-  const refreshAll = useCallback(() => {
+  const refreshAll = useCallback(async () => {
     if (!enabled || targetHosts.length === 0) {
       return;
     }
-    void refetch();
+    await refetch();
   }, [enabled, refetch, targetHosts.length]);
 
   const loadMore = useCallback(() => {

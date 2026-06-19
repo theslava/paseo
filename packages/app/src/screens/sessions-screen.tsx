@@ -151,8 +151,9 @@ function SessionsScreenContent() {
   );
   const [selectedHost, setSelectedHost] = useState(ALL_HOSTS_FILTER_VALUE);
   const historyServerId = selectedHost === ALL_HOSTS_FILTER_VALUE ? null : selectedHost;
-  const { agents, hasMore, isInitialLoad, isLoadingMore, isRevalidating, loadMore, refreshAll } =
-    useAgentHistory({ serverId: historyServerId });
+  const { agents, hasMore, isInitialLoad, isLoadingMore, loadMore, refreshAll } = useAgentHistory({
+    serverId: historyServerId,
+  });
 
   useEffect(() => {
     if (
@@ -167,25 +168,12 @@ function SessionsScreenContent() {
 
   const handleRefresh = useCallback(() => {
     setIsManualRefresh(true);
-    refreshAll();
+    void refreshAll().finally(() => setIsManualRefresh(false));
   }, [refreshAll]);
-
-  useEffect(() => {
-    if (!isRevalidating && isManualRefresh) {
-      setIsManualRefresh(false);
-    }
-  }, [isRevalidating, isManualRefresh]);
 
   const sortedAgents = useMemo(() => {
     return [...agents].sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
   }, [agents]);
-
-  const visibleAgents = useMemo(() => {
-    if (selectedHost === ALL_HOSTS_FILTER_VALUE) {
-      return sortedAgents;
-    }
-    return sortedAgents.filter((agent) => agent.serverId === selectedHost);
-  }, [selectedHost, sortedAgents]);
 
   const emptyText =
     selectedHost === ALL_HOSTS_FILTER_VALUE ? "No sessions yet" : "No sessions for this host";
@@ -224,7 +212,7 @@ function SessionsScreenContent() {
           <LoadingSpinner size="large" color={theme.colors.foregroundMuted} />
         </View>
       ) : null}
-      {!isInitialLoad && visibleAgents.length === 0 ? (
+      {!isInitialLoad && sortedAgents.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>{emptyText}</Text>
           <Button variant="ghost" leftIcon={ChevronLeft} onPress={handleBack}>
@@ -232,11 +220,11 @@ function SessionsScreenContent() {
           </Button>
         </View>
       ) : null}
-      {!isInitialLoad && visibleAgents.length > 0 ? (
+      {!isInitialLoad && sortedAgents.length > 0 ? (
         <AgentList
-          agents={visibleAgents}
+          agents={sortedAgents}
           showCheckoutInfo={false}
-          isRefreshing={isManualRefresh && isRevalidating}
+          isRefreshing={isManualRefresh}
           onRefresh={handleRefresh}
           listFooterComponent={listFooterComponent}
           showAttentionIndicator={false}
