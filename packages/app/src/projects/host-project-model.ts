@@ -99,6 +99,67 @@ function projectCanCreateWorktree(project: HostProjectListItem): boolean {
   return project.hosts.some((h) => h.canCreateWorktree);
 }
 
+export function getHostProjectSourceDirectory(
+  project: HostProjectListItem,
+  serverId: string,
+): string | null {
+  return project.hosts.find((host) => host.serverId === serverId)?.iconWorkingDir ?? null;
+}
+
+export function canCreateWorkspaceForHostProject(input: {
+  project: HostProjectListItem;
+  serverId: string;
+  allowAllProjects: boolean;
+}): boolean {
+  const host = input.project.hosts.find((candidate) => candidate.serverId === input.serverId);
+  if (!host) {
+    return false;
+  }
+  return input.allowAllProjects || host.canCreateWorktree;
+}
+
+export function filterWorkspaceProjectsForHost(input: {
+  projects: readonly HostProjectListItem[];
+  serverId: string;
+  allowAllProjects: boolean;
+}): HostProjectListItem[] {
+  return input.projects.filter((project) =>
+    canCreateWorkspaceForHostProject({
+      project,
+      serverId: input.serverId,
+      allowAllProjects: input.allowAllProjects,
+    }),
+  );
+}
+
+export function resolveInitialWorkspaceProject(input: {
+  routeProject: HostProjectListItem | null;
+  lastActiveProject: HostProjectListItem | null;
+  projects: readonly HostProjectListItem[];
+  serverId: string;
+  allowAllProjects: boolean;
+}): HostProjectListItem | null {
+  const candidates = [input.routeProject, input.lastActiveProject];
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const hydratedProject =
+      input.projects.find((project) => project.projectKey === candidate.projectKey) ?? candidate;
+    if (
+      canCreateWorkspaceForHostProject({
+        project: hydratedProject,
+        serverId: input.serverId,
+        allowAllProjects: input.allowAllProjects,
+      })
+    ) {
+      return hydratedProject;
+    }
+  }
+
+  return input.projects[0] ?? null;
+}
+
 export function resolveInitialWorktreeProject(input: {
   routeProject: HostProjectListItem | null;
   lastActiveProject: HostProjectListItem | null;

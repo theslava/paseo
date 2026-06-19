@@ -3,9 +3,13 @@ import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type { WorkspaceStructureProject } from "@/projects/workspace-structure";
 import {
   buildHostProjectList,
+  canCreateWorkspaceForHostProject,
   canCreateWorktreeForProjectKind,
+  filterWorkspaceProjectsForHost,
+  getHostProjectSourceDirectory,
   hostProjectFromRoute,
   hostProjectFromWorkspace,
+  resolveInitialWorkspaceProject,
   resolveInitialWorktreeProject,
   resolveSelectedHostProject,
   type HostProjectListItem,
@@ -180,6 +184,79 @@ describe("host project list", () => {
         ],
       }),
     ).toBeNull();
+  });
+
+  it("filters new-workspace projects to the selected host", () => {
+    const hostAOnly = hostProject({
+      projectKey: "host-a-project",
+      hosts: [{ serverId: "host-a", iconWorkingDir: "/repo/a", canCreateWorktree: true }],
+    });
+    const hostBOnly = hostProject({
+      projectKey: "host-b-project",
+      hosts: [{ serverId: "host-b", iconWorkingDir: "/repo/b", canCreateWorktree: true }],
+    });
+
+    expect(
+      filterWorkspaceProjectsForHost({
+        projects: [hostAOnly, hostBOnly],
+        serverId: "host-b",
+        allowAllProjects: false,
+      }).map((project) => project.projectKey),
+    ).toEqual(["host-b-project"]);
+  });
+
+  it("allows directory projects only when workspace multiplicity is supported", () => {
+    const directoryProject = hostProject({
+      projectKey: "directory-project",
+      projectKind: "directory",
+      hosts: [{ serverId: "host-a", iconWorkingDir: "/repo/directory", canCreateWorktree: false }],
+    });
+
+    expect(
+      canCreateWorkspaceForHostProject({
+        project: directoryProject,
+        serverId: "host-a",
+        allowAllProjects: false,
+      }),
+    ).toBe(false);
+    expect(
+      canCreateWorkspaceForHostProject({
+        project: directoryProject,
+        serverId: "host-a",
+        allowAllProjects: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("falls back when the route project is not available on the selected host", () => {
+    const selectedHostProject = hostProject({
+      projectKey: "selected-host-project",
+      hosts: [
+        { serverId: "host-b", iconWorkingDir: "/repo/selected-host", canCreateWorktree: true },
+      ],
+    });
+
+    expect(
+      resolveInitialWorkspaceProject({
+        routeProject,
+        lastActiveProject: null,
+        projects: [selectedHostProject],
+        serverId: "host-b",
+        allowAllProjects: false,
+      }),
+    ).toEqual(selectedHostProject);
+  });
+
+  it("resolves the selected host project source directory", () => {
+    const project = hostProject({
+      hosts: [
+        { serverId: "host-a", iconWorkingDir: "/repo/a", canCreateWorktree: true },
+        { serverId: "host-b", iconWorkingDir: "/repo/b", canCreateWorktree: true },
+      ],
+    });
+
+    expect(getHostProjectSourceDirectory(project, "host-b")).toBe("/repo/b");
+    expect(getHostProjectSourceDirectory(project, "host-c")).toBeNull();
   });
 
   it("keeps a selected route project available before project hydration", () => {

@@ -44,9 +44,11 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import { navigateToPreparedWorkspaceTab } from "@/utils/workspace-navigation";
 import {
+  filterWorkspaceProjectsForHost,
+  getHostProjectSourceDirectory,
   hostProjectFromRoute,
   hostProjectFromWorkspace,
-  resolveInitialWorktreeProject,
+  resolveInitialWorkspaceProject,
   resolveSelectedHostProject,
   useHostProjects,
   type HostProjectListItem,
@@ -117,6 +119,7 @@ interface PickerSelection {
 
 interface NewWorkspaceProjectPickerInput {
   serverId: string;
+  selectedServerId: string;
   allServerIds: string[];
   sourceDirectory?: string;
   projectId?: string;
@@ -611,6 +614,7 @@ function computeProjectOptionData(projects: readonly HostProjectListItem[]): Pro
 
 function useNewWorkspaceProjectPicker({
   serverId,
+  selectedServerId,
   allServerIds,
   sourceDirectory,
   projectId,
@@ -638,24 +642,31 @@ function useNewWorkspaceProjectPicker({
     [displayName, projectId, serverId, sourceDirectory],
   );
   const lastActiveProject = useMemo(
-    () => hostProjectFromWorkspace({ serverId, workspace: lastWorkspace }),
-    [lastWorkspace, serverId],
-  );
-  const initialProject = useMemo(
     () =>
-      resolveInitialWorktreeProject({
-        routeProject,
-        lastActiveProject,
-        projects,
-      }),
-    [lastActiveProject, projects, routeProject],
+      lastWorkspaceServerId
+        ? hostProjectFromWorkspace({ serverId: lastWorkspaceServerId, workspace: lastWorkspace })
+        : null,
+    [lastWorkspace, lastWorkspaceServerId],
   );
   const selectableProjects = useMemo(
     () =>
-      allowAllProjects
-        ? projects
-        : projects.filter((project) => project.hosts.some((host) => host.canCreateWorktree)),
-    [allowAllProjects, projects],
+      filterWorkspaceProjectsForHost({
+        projects,
+        serverId: selectedServerId,
+        allowAllProjects,
+      }),
+    [allowAllProjects, projects, selectedServerId],
+  );
+  const initialProject = useMemo(
+    () =>
+      resolveInitialWorkspaceProject({
+        routeProject,
+        lastActiveProject,
+        projects: selectableProjects,
+        serverId: selectedServerId,
+        allowAllProjects,
+      }),
+    [allowAllProjects, lastActiveProject, routeProject, selectableProjects, selectedServerId],
   );
 
   // expo-router reuses the 'new' screen across navigations without remounting, so
@@ -668,17 +679,29 @@ function useNewWorkspaceProjectPicker({
     setManualProjectKey(null);
   }, [routeProjectKey]);
 
-  const selectedProjectKey = manualProjectKey ?? initialProject?.projectKey ?? null;
+  const manualProject = useMemo(
+    () =>
+      manualProjectKey
+        ? resolveSelectedHostProject({
+            selectedProjectKey: manualProjectKey,
+            projects: selectableProjects,
+            routeProject: null,
+            lastActiveProject: null,
+          })
+        : null,
+    [manualProjectKey, selectableProjects],
+  );
+  const selectedProjectKey = manualProject?.projectKey ?? initialProject?.projectKey ?? null;
 
   const selectedProject = useMemo(
     () =>
       resolveSelectedHostProject({
         selectedProjectKey,
-        projects,
+        projects: selectableProjects,
         routeProject,
         lastActiveProject,
       }),
-    [lastActiveProject, projects, routeProject, selectedProjectKey],
+    [lastActiveProject, routeProject, selectableProjects, selectedProjectKey],
   );
   const { options: projectPickerOptions, projectByOptionId }: ProjectOptionData = useMemo(
     () => computeProjectOptionData(selectableProjects),
@@ -697,7 +720,9 @@ function useNewWorkspaceProjectPicker({
   return {
     projects,
     selectedProject,
-    selectedSourceDirectory: selectedProject?.iconWorkingDir ?? null,
+    selectedSourceDirectory: selectedProject
+      ? getHostProjectSourceDirectory(selectedProject, selectedServerId)
+      : null,
     selectedDisplayName: selectedProject?.projectName ?? displayName,
     projectPickerOptions,
     projectByOptionId,
@@ -1171,6 +1196,7 @@ export function NewWorkspaceScreen({
   const {
     projects,
     selectedProject,
+    selectedSourceDirectory,
     projectPickerOptions,
     projectByOptionId,
     selectedProjectOptionId,
@@ -1178,30 +1204,22 @@ export function NewWorkspaceScreen({
     handleSelectProjectOption: selectProjectOption,
   } = useNewWorkspaceProjectPicker({
     serverId,
+    selectedServerId,
     allServerIds,
     sourceDirectory: sourceDirectoryProp,
     projectId,
     displayName: displayNameProp,
     allowAllProjects: supportsWorkspaceMultiplicity,
   });
-  const selectedSourceDirectory = useMemo(() => {
-    if (!selectedProject) return null;
-    const hostPlacement = selectedProject.hosts.find((h) => h.serverId === selectedServerId);
-    return hostPlacement?.iconWorkingDir ?? null;
-  }, [selectedProject, selectedServerId]);
 
   const projectIconTargets = useMemo(
     () =>
       projects.flatMap((project) => {
-        const hostPlacement =
-          project.hosts.find((host) => host.serverId === selectedServerId) ?? project.hosts[0];
-        const iconWorkingDir = (hostPlacement?.iconWorkingDir ?? project.iconWorkingDir).trim();
-        if (!hostPlacement || !iconWorkingDir) {
+        const iconWorkingDir = getHostProjectSourceDirectory(project, selectedServerId)?.trim();
+        if (!iconWorkingDir) {
           return [];
         }
-        return [
-          { projectKey: project.projectKey, serverId: hostPlacement.serverId, iconWorkingDir },
-        ];
+        return [{ projectKey: project.projectKey, serverId: selectedServerId, iconWorkingDir }];
       }),
     [projects, selectedServerId],
   );
@@ -1654,6 +1672,8 @@ export function NewWorkspaceScreen({
     }) => {
       const project = projectByOptionId.get(option.id);
       if (!project) return <View key={option.id} />;
+      const sourceDirectory =
+        getHostProjectSourceDirectory(project, selectedServerId) ?? project.iconWorkingDir;
 
       return (
         <ProjectOptionItem
@@ -1661,7 +1681,7 @@ export function NewWorkspaceScreen({
           projectKey={project.projectKey}
           iconDataUri={projectIconDataByProjectKey.get(project.projectKey) ?? null}
           label={project.projectName}
-          description={project.iconWorkingDir}
+          description={sourceDirectory}
           selected={selected}
           active={active}
           disabled={
@@ -1673,7 +1693,13 @@ export function NewWorkspaceScreen({
         />
       );
     },
-    [isPending, projectByOptionId, projectIconDataByProjectKey, supportsWorkspaceMultiplicity],
+    [
+      isPending,
+      projectByOptionId,
+      projectIconDataByProjectKey,
+      selectedServerId,
+      supportsWorkspaceMultiplicity,
+    ],
   );
 
   const contentStyle = useMemo(
