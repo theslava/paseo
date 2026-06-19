@@ -8,15 +8,23 @@ import {
 } from "./use-sidebar-workspaces-list";
 
 const EMPTY_WORKSPACES: SidebarStatusWorkspacePlacement[] = [];
+const EMPTY_SESSIONS: ReturnType<typeof useSessionStore.getState>["sessions"] = {};
+const EMPTY_PENDING_CREATE_ATTEMPTS: ReturnType<
+  typeof useCreateFlowStore.getState
+>["pendingByDraftId"] = {};
 
 export function useStatusModeWorkspacePlacements(input: {
   placements: SidebarWorkspacePlacement[];
+  enabled?: boolean;
 }): SidebarStatusWorkspacePlacement[] {
-  const sessions = useSessionStore((state) => state.sessions);
-  const pendingCreateAttempts = useCreateFlowStore((state) => state.pendingByDraftId);
+  const isEnabled = input.enabled !== false && input.placements.length > 0;
+  const sessions = useSessionStore((state) => (isEnabled ? state.sessions : EMPTY_SESSIONS));
+  const pendingCreateAttempts = useCreateFlowStore((state) =>
+    isEnabled ? state.pendingByDraftId : EMPTY_PENDING_CREATE_ATTEMPTS,
+  );
 
   return useMemo(() => {
-    if (input.placements.length === 0) {
+    if (!isEnabled) {
       return EMPTY_WORKSPACES;
     }
 
@@ -31,5 +39,5 @@ export function useStatusModeWorkspacePlacements(input: {
       sessions: statusSessions,
       pendingCreateAttempts,
     });
-  }, [input.placements, pendingCreateAttempts, sessions]);
+  }, [input.placements, isEnabled, pendingCreateAttempts, sessions]);
 }

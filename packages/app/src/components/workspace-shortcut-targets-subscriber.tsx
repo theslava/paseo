@@ -14,10 +14,12 @@ export function WorkspaceShortcutTargetsSubscriber({ enabled }: { enabled: boole
     hostFilter: null,
     enabled,
   });
+  const groupMode = useSidebarViewStore((state) => state.groupMode);
+  const isStatusMode = enabled && groupMode === "status";
   const statusWorkspacePlacements = useStatusModeWorkspacePlacements({
     placements: workspacePlacements,
+    enabled: isStatusMode,
   });
-  const groupMode = useSidebarViewStore((state) => state.groupMode);
   const collapsedProjectKeys = useSidebarCollapsedSectionsStore(
     (state) => state.collapsedProjectKeys,
   );

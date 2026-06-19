@@ -1,19 +1,27 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type {
   DaemonClient,
   FetchAgentHistoryEntry,
   FetchAgentHistoryOptions,
 } from "@getpaseo/client/internal/daemon-client";
-import {
-  type AgentHistoryClient,
-  type AgentHistoryHost,
-  fetchAgentHistoryBatch,
-  fetchAgentHistoryPage,
-} from "./use-agent-history";
+import type { AgentHistoryClient, AgentHistoryHost } from "./use-agent-history";
 import { allAgentHistoryQueryKey } from "./agent-history-query-key";
 
-vi.hoisted(() => {
-  (globalThis as unknown as { __DEV__: boolean }).__DEV__ = false;
+(
+  globalThis as unknown as {
+    __DEV__: boolean;
+  }
+).__DEV__ = false;
+
+type UseAgentHistoryModule = typeof import("./use-agent-history");
+
+let fetchAgentHistoryBatch: UseAgentHistoryModule["fetchAgentHistoryBatch"];
+let fetchAgentHistoryPage: UseAgentHistoryModule["fetchAgentHistoryPage"];
+
+beforeAll(async () => {
+  const module = await import("./use-agent-history");
+  fetchAgentHistoryBatch = module.fetchAgentHistoryBatch;
+  fetchAgentHistoryPage = module.fetchAgentHistoryPage;
 });
 
 type FetchAgentHistory = DaemonClient["fetchAgentHistory"];
