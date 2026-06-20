@@ -2458,6 +2458,7 @@ describe("ACPAgentClient probe cleanup", () => {
     expect(child.stderr.destroyed).toBe(true);
   });
 });
+<<<<<<< HEAD
 
 describe("ACP session/load invariant — cwd and mcpServers always passed", () => {
   /**
@@ -2572,3 +2573,177 @@ describe("ACP session/load invariant — cwd and mcpServers always passed", () =
     });
   });
 });
+||||||| parent of 4da32bcf (fix(acp): add tests asserting cwd and mcpServers are always passed to session/load (#1593))
+=======
+
+describe("ACP session/load invariant — cwd and mcpServers always passed", () => {
+  test("loadSession is always called with sessionId, cwd, and mcpServers even when mcpServers is empty", async () => {
+    const loadSession = vi.fn().mockResolvedValue({
+      sessionId: "session-1",
+      modes: null,
+      models: null,
+      configOptions: [],
+    });
+
+    class TestSession extends ACPAgentSession {
+      protected override async spawnProcess(): Promise<SpawnedACPProcess> {
+        return {
+          child: createProbeChildStub(),
+          connection: {
+            prompt: vi.fn(),
+            loadSession,
+          },
+          initialize: { agentCapabilities: { loadSession: true } },
+        } as unknown as SpawnedACPProcess;
+      }
+    }
+
+    const session = new TestSession(
+      {
+        provider: "claude-acp",
+        cwd: "/tmp/paseo-acp-test",
+      },
+      {
+        provider: "claude-acp",
+        logger: createTestLogger(),
+        defaultCommand: ["claude", "--acp"],
+        defaultModes: [],
+        capabilities: {
+          supportsStreaming: true,
+          supportsSessionPersistence: true,
+          supportsDynamicModes: true,
+          supportsMcpServers: true,
+          supportsReasoningStream: true,
+          supportsToolInvocations: true,
+        },
+      },
+    );
+    // Provide the persistence handle that initializeResumedSession requires
+    (session as unknown as { initialHandle: unknown }).initialHandle = {
+      sessionId: "session-1",
+      provider: "claude-acp",
+    };
+
+    await session.initializeResumedSession();
+
+    expect(loadSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      cwd: "/tmp/paseo-acp-test",
+      mcpServers: [],
+    });
+  });
+
+  test("loadSession is always called with mcpServers even when supportsMcpServers is false", async () => {
+    const loadSession = vi.fn().mockResolvedValue({
+      sessionId: "session-1",
+      modes: null,
+      models: null,
+      configOptions: [],
+    });
+
+    class TestSession extends ACPAgentSession {
+      protected override async spawnProcess(): Promise<SpawnedACPProcess> {
+        return {
+          child: createProbeChildStub(),
+          connection: {
+            prompt: vi.fn(),
+            loadSession,
+          },
+          initialize: { agentCapabilities: { loadSession: true } },
+        } as unknown as SpawnedACPProcess;
+      }
+    }
+
+    const session = new TestSession(
+      {
+        provider: "claude-acp",
+        cwd: "/tmp/paseo-acp-test",
+      },
+      {
+        provider: "claude-acp",
+        logger: createTestLogger(),
+        defaultCommand: ["claude", "--acp"],
+        defaultModes: [],
+        capabilities: {
+          supportsStreaming: true,
+          supportsSessionPersistence: true,
+          supportsDynamicModes: true,
+          supportsMcpServers: false,
+          supportsReasoningStream: true,
+          supportsToolInvocations: true,
+        },
+      },
+    );
+    (session as unknown as { initialHandle: unknown }).initialHandle = {
+      sessionId: "session-1",
+      provider: "claude-acp",
+    };
+
+    await session.initializeResumedSession();
+
+    // Even with supportsMcpServers=false, mcpServers: [] must still be passed
+    expect(loadSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      cwd: "/tmp/paseo-acp-test",
+      mcpServers: [],
+    });
+  });
+
+  test("unstable_resumeSession is always called with sessionId, cwd, and mcpServers", async () => {
+    const unstableResumeSession = vi.fn().mockResolvedValue({
+      sessionId: "session-1",
+      modes: null,
+      models: null,
+      configOptions: [],
+    });
+
+    class TestSession extends ACPAgentSession {
+      protected override async spawnProcess(): Promise<SpawnedACPProcess> {
+        return {
+          child: createProbeChildStub(),
+          connection: {
+            prompt: vi.fn(),
+            unstable_resumeSession: unstableResumeSession,
+          },
+          initialize: {
+            agentCapabilities: { sessionCapabilities: { resume: {} } },
+          },
+        } as unknown as SpawnedACPProcess;
+      }
+    }
+
+    const session = new TestSession(
+      {
+        provider: "claude-acp",
+        cwd: "/tmp/paseo-acp-test",
+      },
+      {
+        provider: "claude-acp",
+        logger: createTestLogger(),
+        defaultCommand: ["claude", "--acp"],
+        defaultModes: [],
+        capabilities: {
+          supportsStreaming: true,
+          supportsSessionPersistence: true,
+          supportsDynamicModes: true,
+          supportsMcpServers: true,
+          supportsReasoningStream: true,
+          supportsToolInvocations: true,
+        },
+      },
+    );
+    (session as unknown as { initialHandle: unknown }).initialHandle = {
+      sessionId: "session-1",
+      provider: "claude-acp",
+    };
+
+    await session.initializeResumedSession();
+
+    expect(unstableResumeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      cwd: "/tmp/paseo-acp-test",
+      mcpServers: [],
+    });
+  });
+});
+>>>>>>> 4da32bcf (fix(acp): add tests asserting cwd and mcpServers are always passed to session/load (#1593))
