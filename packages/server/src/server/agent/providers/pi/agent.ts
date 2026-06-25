@@ -89,7 +89,13 @@ const PASEO_PI_TREE_EXTENSION_COMMAND = "paseo_tree";
 const PASEO_PI_CAPTURE_EXTENSION_COMMAND = "paseo_capture_entries";
 const PASEO_PI_ENTRY_CAPTURE_MARKER = "PASEO_ENTRY_CAPTURE";
 const PASEO_PI_COMMAND_RESULT_MARKER = "PASEO_COMMAND_RESULT";
+<<<<<<< HEAD
 const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
+||||||| parent of 51eb6a83 (feat(pi): make extension result timeout configurable via provider params)
+const PASEO_PI_EXTENSION_RESULT_TIMEOUT_MS = 10_000;
+=======
+const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 10_000;
+>>>>>>> 51eb6a83 (feat(pi): make extension result timeout configurable via provider params)
 const QUESTION_RESPONSE_HEADER = "Response";
 const QUESTION_COMMENT_HEADER = "Comment";
 const PI_ASK_USER_FREEFORM_SENTINEL = "✏️ Type custom response...";
