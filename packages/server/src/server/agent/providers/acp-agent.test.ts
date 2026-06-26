@@ -2471,18 +2471,22 @@ describe("ACP session/load invariant — cwd and mcpServers always passed", () =
     loadSession?: ReturnType<typeof vi.fn>;
     unstableResumeSession?: ReturnType<typeof vi.fn>;
   }) {
-    const loadSession = args.loadSession ?? vi.fn().mockResolvedValue({
-      sessionId: "session-1",
-      modes: null,
-      models: null,
-      configOptions: [],
-    });
-    const unstableResumeSession = args.unstableResumeSession ?? vi.fn().mockResolvedValue({
-      sessionId: "session-1",
-      modes: null,
-      models: null,
-      configOptions: [],
-    });
+    const loadSession =
+      args.loadSession ??
+      vi.fn().mockResolvedValue({
+        sessionId: "session-1",
+        modes: null,
+        models: null,
+        configOptions: [],
+      });
+    const unstableResumeSession =
+      args.unstableResumeSession ??
+      vi.fn().mockResolvedValue({
+        sessionId: "session-1",
+        modes: null,
+        models: null,
+        configOptions: [],
+      });
 
     class TestSession extends ACPAgentSession {
       protected override async spawnProcess(): Promise<SpawnedACPProcess> {
