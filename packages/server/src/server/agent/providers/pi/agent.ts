@@ -1002,6 +1002,8 @@ export class PiRpcAgentSession implements AgentSession {
   private outOfBandCompactionCompleted = false;
   private state: PiSessionState;
   private closed = false;
+  private readonly USAGE_POLL_INTERVAL_MS = 5_000;
+  private usagePollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: PiRpcAgentSessionOptions) {
     this.runtimeSession = options.runtimeSession;
@@ -1193,6 +1195,7 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   async close(): Promise<void> {
+    this.stopUsagePolling();
     if (this.closed) {
       return;
     }
@@ -1628,6 +1631,7 @@ export class PiRpcAgentSession implements AgentSession {
           provider: PI_PROVIDER,
           turnId,
         });
+        this.startUsagePolling();
         return;
       case "message_start":
         return;
@@ -1691,6 +1695,7 @@ export class PiRpcAgentSession implements AgentSession {
         });
         return;
       case "agent_end":
+        this.stopUsagePolling();
         this.completeTurn(turnId, event.messages ?? []);
         return;
       default:
@@ -1841,6 +1846,35 @@ export class PiRpcAgentSession implements AgentSession {
       turnId,
     });
     void this.refreshAfterTurn(turnId);
+  }
+
+  private startUsagePolling(): void {
+    if (this.usagePollTimer !== null) return;
+    this.usagePollTimer = setInterval(() => {
+      void this.pollUsage().catch(() => undefined);
+    }, this.USAGE_POLL_INTERVAL_MS);
+  }
+
+  private stopUsagePolling(): void {
+    if (this.usagePollTimer !== null) {
+      clearInterval(this.usagePollTimer);
+      this.usagePollTimer = null;
+    }
+  }
+
+  private async pollUsage(): Promise<void> {
+    const usage = await this.runtimeSession
+      .getSessionStats()
+      .then(toAgentUsage)
+      .catch(() => undefined);
+    if (usage) {
+      this.emit({
+        type: "usage_updated",
+        provider: PI_PROVIDER,
+        turnId: this.activeTurnId ?? undefined,
+        usage,
+      });
+    }
   }
 
   private async refreshState(): Promise<void> {
