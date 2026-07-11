@@ -111,11 +111,12 @@ OMP's `agent.ts` imports these from `../pi/history-mapper.js`, `../pi/cli-runtim
    - Verify `builtinProviderIds` array includes both `"pi"` and `"omp"` as separate entries. No derived assumptions to update.
 
 3. **`provider-registry.test.ts`**
-   - Remove mock for `"./providers/pi/agent.js"` that was shared between pi and omp tests
-   - Add separate mock for `"./providers/omp/agent.js"` if needed
-   - Update test expectations: OMP should NOT have `derivedFromProviderId: "pi"` anymore
-   - Rename/update test titles: "OMP is a disabled built-in backed by the Pi adapter" → "OMP is a disabled standalone built-in provider"
-   - Update the "built-in OMP override passes params to the Pi adapter constructor" test title and expectations
+
+- Remove mock for `"./providers/pi/agent.js"` that was shared between pi and omp tests
+- Add separate mock for `"./providers/omp/agent.js"` if needed
+- OMP always had `derivedFromProviderId: null` (it was a built-in, not custom-derived); no expectation change needed here
+- Rename/update test title: "OMP is a disabled built-in backed by the Pi adapter" → "OMP is a disabled standalone built-in provider"
+- Update the "built-in OMP override passes params to the Pi adapter constructor" test title → "...to the OmpRpcAgentClient constructor" and expectations
 
 4. **`import-sessions.test.ts`**
    - No changes needed — generic provider handling
@@ -180,7 +181,7 @@ None. Pi's implementation stays intact. Its test-utils/fake-pi.ts continues serv
 - Update binary command env vars: `PI_COMMAND` → `OMP_COMMAND`, etc.
 - Update extension marker names: `PASEO_PI_*` → `PASEO_OMP_*`
 - Import shared modules from `../pi/history-mapper.js`, `../pi/cli-runtime.js`, `../pi/runtime.js`, `../pi/session-descriptor.js`, etc.
-- When constructing `PiCliRuntime` via `createRuntime()`: pass `{ command: ["omp"], commandsRpcType: "get_available_commands" }` as options (uses the existing `command` field on `PiCliRuntimeOptions`)
+- When constructing runtime: call `new PiCliRuntime({ logger, runtimeSettings, commandsRpcType, command: ["omp"] })` directly — bypass `createRuntime()` because it doesn't forward the `command` option. Pass `{ commandsRpcType: "get_available_commands" }`. OMP stores this in its own `runtime` field.
 - Session descriptor calls work unchanged — OMP passes its own `sessionDir` via `providerParams.sessionDir` which overrides everything in session-descriptor.ts
 
 ### Phase 3: Wire up OMP in provider registry
