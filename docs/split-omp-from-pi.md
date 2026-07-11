@@ -67,19 +67,24 @@ Copy of `providers/pi/agent.ts`. Rename all Pi identifiers to OMP:
 - All internal `provider: PI_PROVIDER` literals → `OMP_PROVIDER`
 - `commandsRpcType`: pass `"get_available_commands"` to the runtime constructor inside the OMP client
 
-### Shared modules — do NOT duplicate
+### 2. `packages/server/src/server/agent/providers/omp/rewind.ts`
+
+Copy of `providers/pi/rewind.ts`. Each provider has its own rewind file because it uses a provider-specific navigator API (Pi calls `navigateTree()`). Rename `revertPiConversation` → `revertOmpConversation`. Content is likely identical since both use tree navigation, but they must be independent files — no shared import from pi/.
+
+---
+
+## Shared Modules (do NOT duplicate)
 
 The following files are **already provider-agnostic** and should be imported from `providers/pi/` by both Pi and OMP. Duplicating them creates dead weight and divergence risk:
 
-| File                    | Why shared                                                                                                                           | Notes                                                                                                                                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `history-mapper.ts`     | Takes a dynamic `provider: string` parameter; emits events with whatever provider you give it. No hardcoded `"pi"` strings.          | Verify no transitive imports pull in Pi-only types.                                                                                                                                       |
-| `tool-call-mapper.ts`   | Provider-agnostic internally. Maps tool names/results generically.                                                                   | —                                                                                                                                                                                         |
-| `runtime.ts`            | Defines `PiRuntime` interface + exports. Generic for any Pi-compatible binary. Both providers use the same interface.                | Add `defaultCommand?: [string, ...string[]]` option to `PiCliRuntimeOptions`. Default stays `["pi"]` for backward compat. OMP passes its own.                                             |
-| `cli-runtime.ts`        | Implements `PiRuntime` via CLI subprocess. The only differentiation is the command/RPC type, which gets passed at construction time. | See `runtime.ts` note above — must accept `defaultCommand` or create `OmpCliRuntime`.                                                                                                     |
-| `rewind.ts`             | Rewind logic is session-generic (no provider-specific behavior).                                                                     | Verify no hidden Pi-type dependencies.                                                                                                                                                    |
-| `session-descriptor.ts` | Session descriptor reads JSONL files and parses them. **Not yet provider-agnostic.**                                                 | Must be parameterized first — see Phase 0 below. Hardcoded `.pi`, `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR` constants need a config object so OMP can pass `.omp` equivalents. |
-| `test-utils/fake-pi.ts` | Fake test utilities mock the generic runtime interface. One set serves both providers.                                               | —                                                                                                                                                                                         |
+| File                    | Why shared                                                                                                                                                                                                | Notes                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `history-mapper.ts`     | Takes a dynamic `provider: string` parameter; emits events with whatever provider you give it. No hardcoded `"pi"` strings.                                                                               | Verify no transitive imports pull in Pi-only types.                                           |
+| `tool-call-mapper.ts`   | Provider-agnostic internally. Maps tool names/results generically.                                                                                                                                        | —                                                                                             |
+| `runtime.ts`            | Defines `PiRuntime` interface + exports. Generic for any Pi-compatible binary. Both providers use the same interface.                                                                                     | No changes needed — both pass their own `command` via existing `PiCliRuntimeOptions.command`. |
+| `cli-runtime.ts`        | Implements `PiRuntime` via CLI subprocess. The only differentiation is the command/RPC type, which gets passed at construction time.                                                                      | No changes needed.                                                                            |
+| `session-descriptor.ts` | Session descriptor reads JSONL files and parses them. Hardcoded `.pi` constants are only used when `options.sessionDir` is not provided; OMP always passes it explicitly via `providerParams.sessionDir`. | No changes needed — fully parameterized by caller-supplied `sessionDir`.                      |
+| `test-utils/fake-pi.ts` | Fake test utilities mock the generic runtime interface. One set serves both providers.                                                                                                                    | —                                                                                             |
 
 OMP's `agent.ts` imports these from `../pi/history-mapper.js`, `../pi/cli-runtime.js`, etc.
 
@@ -160,17 +165,13 @@ None. Pi's implementation stays intact. Its test-utils/fake-pi.ts continues serv
 
 ## Implementation Order
 
-> **Prerequisite:** Before any copy/adapt work, parameterize the shared modules that currently have hardcoded Pi values (see Phase 0). Otherwise OMP will inherit Pi defaults.
+> **Note:** No shared module changes required — see Shared Modules table above. Existing `PiCliRuntimeOptions.command` (line 52 of cli-runtime.ts) already handles passing a custom default. After splitting, OMP passes `{ command: ["omp"], commandsRpcType: "get_available_commands" }` directly to `new PiCliRuntime(...)`. OMP's `sessionDir` via `providerParams.sessionDir` completely overrides session-descriptor hardcoded constants because it short-circuits all path resolution before any `.pi` constant is consulted.
 
-### Phase 0: Parameterize shared modules
-
-- **`cli-runtime.ts`**: Add `defaultCommand?: [string, ...string[]]` option to `PiCliRuntimeOptions`. If provided, use it instead of `DEFAULT_PI_COMMAND`; otherwise fall back to `["pi"]` for backward compat. This lets OMP pass its own default without duplicating the runtime.
-- **`session-descriptor.ts`**: Extract the hardcoded constants into a configurable object. Add a `SessionDescriptorConfig` type: `{ configDirName: string; agentDirEnv: string; sessionDirEnv: string }`. Update `resolvePiSessionsDir()` / `resolvePiAgentDir()` to read from this config instead of the module-level `.pi` constants. Export a factory or accept it as options in `listPiImportableSessions()`. Default Pi values stay as-is so existing callers are unaffected.
-
-### Phase 1: Create OMP provider directory and copy agent.ts
+### Phase 1: Create OMP provider directory and copy files
 
 - Create `providers/omp/` directory
-- Copy only `agent.ts` from `providers/pi/agent.ts`
+- Copy `providers/pi/agent.ts` → `providers/omp/agent.ts`
+- Copy `providers/pi/rewind.ts` → `providers/omp/rewind.ts`
 
 ### Phase 2: Rename and adapt OMP agent.ts
 
@@ -179,9 +180,8 @@ None. Pi's implementation stays intact. Its test-utils/fake-pi.ts continues serv
 - Update binary command env vars: `PI_COMMAND` → `OMP_COMMAND`, etc.
 - Update extension marker names: `PASEO_PI_*` → `PASEO_OMP_*`
 - Import shared modules from `../pi/history-mapper.js`, `../pi/cli-runtime.js`, `../pi/runtime.js`, `../pi/session-descriptor.js`, etc.
-- Pass `defaultCommand: ["omp"]` when constructing `PiCliRuntime` via `createRuntime()`
-- Pass `commandsRpcType: "get_available_commands"` to the runtime constructor
-- When calling session descriptor listing/import, pass `{ configDirName: ".omp", agentDirEnv: "OMP_CODING_AGENT_DIR", ... }` or equivalent parameterization
+- When constructing `PiCliRuntime` via `createRuntime()`: pass `{ command: ["omp"], commandsRpcType: "get_available_commands" }` as options (uses the existing `command` field on `PiCliRuntimeOptions`)
+- Session descriptor calls work unchanged — OMP passes its own `sessionDir` via `providerParams.sessionDir` which overrides everything in session-descriptor.ts
 
 ### Phase 3: Wire up OMP in provider registry
 
@@ -209,6 +209,5 @@ None. Pi's implementation stays intact. Its test-utils/fake-pi.ts continues serv
 - [ ] Protocol package tests pass
 - [ ] Both "pi" and "omp" providers can be instantiated independently via `buildProviderRegistry`
 - [ ] Existing tests no longer depend on shared mock state between pi and omp
-- [ ] OMP provider definition has `derivedFromProviderId: null`
-- [ ] No COMPAT shim cleanup needed (none exist)
-- [ ] Shared modules verified: `history-mapper.ts`, `rewind.ts`, `session-descriptor.ts` have no transitive Pi-only dependencies when imported from `providers/omp/`
+- [ ] No COMPAT shim cleanup needed (none exist for this migration; existing `piGetStateFallback` shim is about old OMP binary versions, unrelated)
+- [ ] Shared modules verified: `history-mapper.ts`, `tool-call-mapper.ts`, `session-descriptor.ts` have no transitive Pi-only dependencies when imported from `providers/omp/`
