@@ -63,13 +63,14 @@ Copy of `providers/pi/agent.ts`. Rename all Pi identifiers to OMP:
   - `PiSlashCommandInvocation` → `OmpSlashCommandInvocation`
 - Function renames: all `pi*` prefixed functions → `omp*` (`normalizePiModelLabel`, `transformPiModels`, `isPiThinkingLevel`, `mapPiModel`, `createRuntime`, `buildResumeConfig`, `toPiMcpConfig`, `createPiPaseoExtensionFile`, `isPiMcpAdapterCommand`, `withPiMcpCapability`, `isPiRequestAbortError`, `latestPiErrorMessage`, `formatPiErrorMessage`, `piAssistantText`)
 - Binary command env vars: `PI_COMMAND` → `OMP_COMMAND`, `PI_ACP_PI_COMMAND` → `OMP_ACP_OMP_COMMAND`
-- Extension marker names: `PASEO_PI_*` → `PASEO_OMP_*`
+- Extension marker names: `PASEO_PI_*` → `PASEO_OMP_*` — **but** the command name strings inside the generated extension file remain `"paseo_tree"` and `"paseo_capture_entries"`. Only the marker prefixes change (`PASEO_PI_ENTRY_CAPTURE_MARKER` → `PASEO_OMP_ENTRY_CAPTURE_MARKER`). Both Pi and OMP binaries must accept these same registration names.
+- Temp directory prefix in `createPiPaseoExtensionFile()` → rename to `createOmpPaseoExtensionFile()` with prefix `"paseo-omp-extension-"`
 - All internal `provider: PI_PROVIDER` literals → `OMP_PROVIDER`
 - `commandsRpcType`: pass `"get_available_commands"` to the runtime constructor inside the OMP client
 
-### 2. `packages/server/src/server/agent/providers/omp/rewind.ts`
+### 2. `packages/server/src/server/agent/providers/omp/agent.test.ts`
 
-Copy of `providers/pi/rewind.ts`. Each provider has its own rewind file because it uses a provider-specific navigator API (Pi calls `navigateTree()`). Rename `revertPiConversation` → `revertOmpConversation`. Content is likely identical since both use tree navigation, but they must be independent files — no shared import from pi/.
+Copy of `providers/pi/agent.test.ts`. Apply the same Pi → OMP renames as in `agent.ts`: type names, class references, function calls, and import paths. Shared-module tests (`cli-runtime.test.ts`, `history-mapper.test.ts`, etc.) stay in place — they test generic code. Only `agent.test.ts` needs duplication because it exercises provider-specific behavior (model transforms, MCP config, extension file generation).
 
 ---
 
@@ -79,11 +80,13 @@ The following files are **already provider-agnostic** and should be imported fro
 
 | File                    | Why shared                                                                                                                                                                                                | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `history-mapper.ts`     | Takes a dynamic `provider: string` parameter; emits events with whatever provider you give it. No hardcoded `"pi"` strings.                                                                               | Verify no transitive imports pull in Pi-only types.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `rpc-types.ts`          | All RPC wire types (`PiRuntimeEvent`, `PiAgentMessage`, `PiModel`, etc.). Both providers speak the same Pi-compatible binary protocol.                                                                    | After split OMP imports carry `Pi*` type names — cosmetic only; both binaries produce identical wire shapes. Do not rename or duplicate these types.                                                                                                                                                                                                                                                                                                                                   |
+| `history-mapper.ts`     | Takes a dynamic `provider: string` parameter; emits events with whatever provider you give it. No hardcoded `"pi"` strings.                                                                               | Verified: transitive import of `rpc-types.js` is types-only and clean.                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `tool-call-mapper.ts`   | Provider-agnostic internally. Maps tool names/results generically.                                                                                                                                        | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `runtime.ts`            | Defines `PiRuntime` interface + exports. Generic for any Pi-compatible binary. Both providers use the same interface.                                                                                     | No changes needed — both pass their own `command` via existing `PiCliRuntimeOptions.command`.                                                                                                                                                                                                                                                                                                                                                                                          |
 | `cli-runtime.ts`        | Implements `PiRuntime` via CLI subprocess. Both providers use it with their own command/RPC type passed at construction time.                                                                             | Contains `COMPAT(piGetStateFallback)` shim (line 183) that catches `get_session_stats` failures and falls back to parsing `contextUsage` from `get_state`. Comment says "older Oh My Pi binaries" — this is OMP-specific compat. After split, both Pi and OMP share this file so neither can drop the shim without testing the other. Relabel to `COMPAT(ompSessionStatsFallback)` after split; whichever provider has the higher floor controls survival. Drop when floor >= v0.1.97. |
 | `session-descriptor.ts` | Session descriptor reads JSONL files and parses them. Hardcoded `.pi` constants are only used when `options.sessionDir` is not provided; OMP always passes it explicitly via `providerParams.sessionDir`. | No changes needed — fully parameterized by caller-supplied `sessionDir`.                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `rewind.ts`             | Single interface + function for tree navigation (`navigateTree`). Structurally generic — no provider-specific logic.                                                                                      | Shared: OMP imports from `../pi/rewind.js`. The `PiRewindNavigator` name carries a naming smell but is harmless.                                                                                                                                                                                                                                                                                                                                                                       |
 | `test-utils/fake-pi.ts` | Fake test utilities mock the generic runtime interface. One set serves both providers.                                                                                                                    | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 OMP's `agent.ts` imports these from `../pi/history-mapper.js`, `../pi/cli-runtime.js`, etc.
@@ -111,28 +114,30 @@ OMP's `agent.ts` imports these from `../pi/history-mapper.js`, `../pi/cli-runtim
    - Verify `builtinProviderIds` array includes both `"pi"` and `"omp"` as separate entries. No derived assumptions to update.
 
 3. **`provider-registry.test.ts`**
-
-- Remove mock for `"./providers/pi/agent.js"` that was shared between pi and omp tests
-- Add separate mock for `"./providers/omp/agent.js"` if needed
-- OMP always had `derivedFromProviderId: null` (it was a built-in, not custom-derived); no expectation change needed here
-- Rename/update test title: "OMP is a disabled built-in backed by the Pi adapter" → "OMP is a disabled standalone built-in provider"
-- Update the "built-in OMP override passes params to the Pi adapter constructor" test title → "...to the OmpRpcAgentClient constructor" and expectations
+   - Remove mock for `"./providers/pi/agent.js"` that was shared between pi and omp tests
+   - Add separate mock for `"./providers/omp/agent.js"` if needed
+   - OMP always had `derivedFromProviderId: null` (it was a built-in, not custom-derived); no expectation change needed here
+   - Rename/update test title: "OMP is a disabled built-in backed by the Pi adapter" → "OMP is a disabled standalone built-in provider"
+   - Update the "built-in OMP override passes params to the Pi adapter constructor" test title → "...to the OmpRpcAgentClient constructor" and expectations
 
 4. **`import-sessions.test.ts`**
    - No changes needed — generic provider handling
 
 5. **E2E test files:**
-   - `daemon-e2e/pi.real.e2e.test.ts` — keep as-is (Pi-specific real e2e)
-   - `daemon-e2e/pi-rewind.real.e2e.test.ts` — keep as-is
-   - Create `daemon-e2e/omp.real.e2e.test.ts` if we want OMP real tests (deferred — out of scope for split)
+   - `server/daemon-e2e/pi.real.e2e.test.ts` — keep as-is (Pi-specific real e2e)
+   - `server/daemon-e2e/pi-rewind.real.e2e.test.ts` — keep as-is
+   - Create `server/daemon-e2e/omp.real.e2e.test.ts` if we want OMP real tests (deferred — out of scope for split)
 
-6. **`real-provider-test-config.ts`**
-   - Add `"omp"` to `RealProvider` type union
-   - Add binary resolution case for omp alongside pi
+6. **`server/daemon-e2e/real-provider-test-config.ts`**
+   - Add `"omp"` to `realProviders` array (line 15) so it propagates to `RealProvider` type union
+   - Add `OMP_REAL_TEST_MODEL` constant alongside `PI_REAL_TEST_MODEL`
+   - Add `"omp"` case to `getRealProviderConfig()` switch returning `{ provider: "omp", model: OMP_REAL_TEST_MODEL }`
+   - Add `"omp"` case to `getRealProviderRuntimeSettings()` switch
+   - Add `"omp"` binary availability check via `isCommandAvailable("omp")` alongside pi
 
-7. **`acp-agent.test.ts`**
-   - The test using `transformPiModels` with `provider: "pi"` should stay as-is since that's testing the ACP adapter's model transformer with a PI provider specifically
-   - No changes needed unless transformPiModels is renamed
+7. **`providers/acp-agent.test.ts`**
+   - The test using `transformPiModels` with `provider: "pi"` stays as-is — tests the ACP adapter's model transformer with a Pi provider specifically
+   - No changes needed unless `transformPiModels` is renamed in Pi's own agent.ts
 
 8. **`agent-manager.ts`**
    - No changes needed — no `derivedFromProviderId === "pi"` filtering logic exists in production code
@@ -172,15 +177,16 @@ None. Pi's implementation stays intact. Its test-utils/fake-pi.ts continues serv
 
 - Create `providers/omp/` directory
 - Copy `providers/pi/agent.ts` → `providers/omp/agent.ts`
-- Copy `providers/pi/rewind.ts` → `providers/omp/rewind.ts`
+- Copy `providers/pi/agent.test.ts` → `providers/omp/agent.test.ts`
 
-### Phase 2: Rename and adapt OMP agent.ts
+### Phase 2: Rename and adapt OMP agent.ts and agent.test.ts
 
-- Rename all Pi → OMP identifiers (types, constants, classes, functions)
+- Rename all Pi → OMP identifiers (types, constants, classes, functions) in both files
 - Change provider string literals: `PI_PROVIDER` → `OMP_PROVIDER = "omp"`
 - Update binary command env vars: `PI_COMMAND` → `OMP_COMMAND`, etc.
-- Update extension marker names: `PASEO_PI_*` → `PASEO_OMP_*`
-- Import shared modules from `../pi/history-mapper.js`, `../pi/cli-runtime.js`, `../pi/runtime.js`, `../pi/session-descriptor.js`, etc.
+- Update extension marker names: `PASEO_PI_*` → `PASEO_OMP_*` — command name strings inside the generated extension remain `"paseo_tree"` and `"paseo_capture_entries"`
+- Update temp dir prefix to `"paseo-omp-extension-"`
+- Import shared modules from `../pi/history-mapper.js`, `../pi/cli-runtime.js`, `../pi/runtime.js`, `../pi/session-descriptor.js`, `../pi/rewind.js`, etc.
 - When constructing runtime: call `new PiCliRuntime({ logger, runtimeSettings, commandsRpcType, command: ["omp"] })` directly — bypass `createRuntime()` because it doesn't forward the `command` option. Pass `{ commandsRpcType: "get_available_commands" }`. OMP stores this in its own `runtime` field.
 - Session descriptor calls work unchanged — OMP passes its own `sessionDir` via `providerParams.sessionDir` which overrides everything in session-descriptor.ts
 
@@ -211,4 +217,5 @@ None. Pi's implementation stays intact. Its test-utils/fake-pi.ts continues serv
 - [ ] Both "pi" and "omp" providers can be instantiated independently via `buildProviderRegistry`
 - [ ] Existing tests no longer depend on shared mock state between pi and omp
 - [ ] No COMPAT shim cleanup needed (none exist for this migration; existing `piGetStateFallback` shim is about old OMP binary versions, unrelated)
-- [ ] Shared modules verified: `history-mapper.ts`, `tool-call-mapper.ts`, `session-descriptor.ts` have no transitive Pi-only dependencies when imported from `providers/omp/`
+- [ ] Shared modules verified: `rpc-types.ts`, `history-mapper.ts`, `tool-call-mapper.ts`, `session-descriptor.ts`, `rewind.ts` have no transitive Pi-only dependencies when imported from `providers/omp/`
+- [ ] OMP extension command names (`"paseo_tree"`, `"paseo_capture_entries"`) match what the OMP binary expects
