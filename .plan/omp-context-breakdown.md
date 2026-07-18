@@ -61,13 +61,41 @@ This requires changes in both repos:
 
 ## Implementation Plan
 
-### Phase 1: Protocol & Types (Paseo only, safe standalone change)
+### Phase 0: OMP-side RPC exposure (`oh-my-pi-inspect`) **[BLOCKER]**
+
+**Goal:** Expose `computeContextBreakdown()` over the ACP/RPC protocol so Paseo can request it. Without this, Phases 1–3 have no data source and are wasted effort.
+
+#### 0a. Add new RPC command
+
+- **File:** `packages/coding-agent/src/modes/rpc/rpc-types.ts`
+- Add `{ type: "get_context_breakdown" }` to `RpcCommand` union.
+
+#### 0b. Handle the command
+
+- **File:** `packages/coding-agent/src/modes/rpc/rpc-mode.ts` or wherever commands are dispatched
+- Route `get_context_breakdown` to call `computeContextBreakdown(session)` and return result as JSON.
+
+#### 0c. Define response shape
+
+```ts
+interface ContextBreakdownResponse {
+  contextWindow: number;
+  usedTokens: number;
+  freeTokens: number;
+  autoCompactBufferTokens: number;
+  categories: Array<{
+    id: string;
+    label: string;
+    tokens: number;
+  }>;
+}
+```
+
+### Phase 1: Protocol & Types (Paseo)
 
 **Goal:** Wire up the data contract so the server→app pipeline carries breakdown data when available.
 
 #### 1a. Extend `AgentUsage` type
-
-- **File:** `packages/protocol/src/agent-types.ts` + `packages/protocol/src/messages.ts`
 - Add optional fields to `AgentUsage`:
   ```ts
   // Context breakdown categories (OMP /context slash command data)
@@ -142,35 +170,6 @@ This requires changes in both repos:
 - Uses same `formatTokenCount` utility already in the codebase.
 - Responsive layout: on compact form factor, shows only top-level categories; on larger screens, full detail.
 
-### Phase 4: OMP-side change (`oh-my-pi-inspect`)
-
-**Goal:** Make the breakdown available over RPC.
-
-#### 4a. Add new RPC command
-
-- **File:** `packages/coding-agent/src/modes/rpc/rpc-types.ts`
-- Add `{ type: "get_context_breakdown" }` to `RpcCommand` union.
-
-#### 4b. Handle the command
-
-- **File:** `packages/coding-agent/src/modes/rpc/rpc-mode.ts` or wherever commands are dispatched
-- Route `get_context_breakdown` to call `computeContextBreakdown(session)` and return result as JSON.
-
-#### 4c. Define response shape
-
-```ts
-interface ContextBreakdownResponse {
-  contextWindow: number;
-  usedTokens: number;
-  freeTokens: number;
-  autoCompactBufferTokens: number;
-  categories: Array<{
-    id: string;
-    label: string;
-    tokens: number;
-  }>;
-}
-```
 
 ## File Inventory
 
@@ -192,10 +191,7 @@ interface ContextBreakdownResponse {
 
 ## Dependencies & Ordering
 
-1. **Phase 4** (OMP RPC) is a prerequisite for real data, but...
-2. **Phases 1-3** can be shipped first: the pipeline handles missing data gracefully (all optional). The UI shows the existing ring until OMP ships the RPC, then automatically upgrades to full breakdown.
-
-This means we can land Paseo changes immediately and the feature activates when the next OMP version with `get_context_breakdown` is deployed.
+**Phase 0 must land first.** The Paseo-side changes (Phases 1–3) have no data source without the OMP RPC exposure. Once Phase 0 ships in an OMP release, Phases 1–3 activate automatically via the graceful fallback path.
 
 ## Risks
 
