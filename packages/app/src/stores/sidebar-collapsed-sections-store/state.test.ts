@@ -14,6 +14,8 @@ function emptyState(): CollapsedProjectsState {
     collapsedProjectKeys: new Set(),
     collapsedStatusGroupKeys: new Set(),
     collapsedPinned: false,
+    collapsedWorkspaceKeys: new Set(),
+    collapsedAgentIds: new Set(),
   };
 }
 
@@ -35,12 +37,16 @@ describe("sidebar collapsed projects transitions", () => {
       collapsedProjectKeys: new Set(["project-a", "project-b"]),
       collapsedStatusGroupKeys: new Set(["running"]),
       collapsedPinned: true,
+      collapsedWorkspaceKeys: new Set(["ws-1"]),
+      collapsedAgentIds: new Set(["agent-1"]),
     };
 
     expect(serializeCollapsedProjects(state)).toEqual({
       collapsedProjectKeys: ["project-a", "project-b"],
       collapsedStatusGroupKeys: ["running"],
       collapsedPinned: true,
+      collapsedWorkspaceKeys: ["ws-1"],
+      collapsedAgentIds: ["agent-1"],
     });
   });
 

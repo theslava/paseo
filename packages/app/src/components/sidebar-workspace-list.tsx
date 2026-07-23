@@ -128,6 +128,9 @@ import {
   isNative as platformIsNative,
   getIsElectron,
 } from "@/constants/platform";
+import { MemoSidebarWorkspaceChildren } from "@/components/sidebar/sidebar-workspace-children";
+import { useAgentsByWorkspace } from "@/hooks/sidebar-agent-tree";
+import { useSidebarTerminals } from "@/hooks/use-sidebar-terminals";
 import { getDesktopHost } from "@/desktop/host";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
@@ -1648,6 +1651,24 @@ function ProjectBlock({
     enabled: selectionEnabled,
   });
 
+  // Sidebar tree expansion: agents + terminals under workspaces
+  const workspaceKeys = useMemo(
+    () => project.workspaces.map((ws) => ws.workspaceKey),
+    [project.workspaces],
+  );
+  const agentsByWorkspace = useAgentsByWorkspace(workspaceKeys, !collapsed);
+  const terminalsByWorkspace = useSidebarTerminals(project.workspaces);
+  const collapsedWorkspaceKeys = useSidebarCollapsedSectionsStore(
+    (state) => state.collapsedWorkspaceKeys,
+  );
+  const toggleWorkspaceCollapsed = useSidebarCollapsedSectionsStore(
+    (state) => state.toggleWorkspaceCollapsed,
+  );
+  const collapsedAgentIds = useSidebarCollapsedSectionsStore((state) => state.collapsedAgentIds);
+  const toggleAgentCollapsed = useSidebarCollapsedSectionsStore(
+    (state) => state.toggleAgentCollapsed,
+  );
+
   const renderWorkspaceRow = useCallback(
     (
       item: SidebarWorkspacePlacement,
@@ -1702,13 +1723,34 @@ function ProjectBlock({
       isActive,
       dragHandleProps: workspaceDragHandleProps,
     }: DraggableRenderItemInfo<SidebarWorkspacePlacement>) => {
-      return renderWorkspaceRow(item, {
-        drag: workspaceDrag,
-        isDragging: isActive,
-        dragHandleProps: workspaceDragHandleProps,
-      });
+      return (
+        <View style={styles.workspaceBlock}>
+          {renderWorkspaceRow(item, {
+            drag: workspaceDrag,
+            isDragging: isActive,
+            dragHandleProps: workspaceDragHandleProps,
+          })}
+          <MemoSidebarWorkspaceChildren
+            workspaceKey={item.workspaceKey}
+            agents={agentsByWorkspace.get(item.workspaceKey) ?? null}
+            terminals={terminalsByWorkspace.get(item.workspaceKey) ?? null}
+            collapsedWorkspaceKeys={collapsedWorkspaceKeys}
+            toggleWorkspaceCollapsed={toggleWorkspaceCollapsed}
+            collapsedAgentIds={collapsedAgentIds}
+            toggleAgentCollapsed={toggleAgentCollapsed}
+          />
+        </View>
+      );
     },
-    [renderWorkspaceRow],
+    [
+      renderWorkspaceRow,
+      agentsByWorkspace,
+      terminalsByWorkspace,
+      collapsedWorkspaceKeys,
+      toggleWorkspaceCollapsed,
+      collapsedAgentIds,
+      toggleAgentCollapsed,
+    ],
   );
 
   const handleWorkspaceDragEnd = useCallback(
@@ -2412,6 +2454,7 @@ const styles = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing[1],
   },
   workspaceListContainer: {},
+  workspaceBlock: {},
   newWorkspaceGhostRow: {
     minHeight: 32,
     marginLeft: theme.spacing[6],
