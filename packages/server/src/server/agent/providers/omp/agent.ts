@@ -93,6 +93,7 @@ import { streamOmpHistory } from "./history.js";
 import { mapOmpTodoReminderEvent, mapOmpTodoState, mapOmpTodoToolResult } from "./todo-mapper.js";
 import { mapOmpRuntimeEventToTimelineItem } from "./event-mapper.js";
 import { mapOmpAdvisorMessageToToolCall } from "./advisor-message.js";
+import { mapOmpSystemNoticeToToolCall } from "./system-notice.js";
 import {
   clearOmpHostToolState,
   handleOmpHostToolRuntimeEvent,
@@ -2066,12 +2067,13 @@ export class OmpAgentSession implements AgentSession {
     if (event.message.role === "custom") {
       const text = getUserMessageText(event.message.content);
       if (text) {
-        const advisorItem = mapOmpAdvisorMessageToToolCall(event.message, text);
+        const item = mapOmpAdvisorMessageToToolCall(event.message, text) ??
+          mapOmpSystemNoticeToToolCall(text) ?? { type: "assistant_message", text };
         this.emit({
           type: "timeline",
           provider: this.provider,
           turnId,
-          item: advisorItem ?? { type: "assistant_message", text },
+          item,
         });
       }
       if (!this.activeTurnHasUserMessage) {
