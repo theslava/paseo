@@ -4,6 +4,8 @@ export interface SidebarProjectHostTarget {
   serverId: string;
   projectId: string;
   iconWorkingDir: string;
+  customIconRevision?: string | null;
+  iconRevision?: string;
 }
 
 export type SidebarProjectTrailingAction =
@@ -23,12 +25,20 @@ function hostTarget(input: {
   serverId: string;
   projectId: string;
   iconWorkingDir: string;
+  customIconRevision?: string | null;
+  iconRevision?: string;
 }): SidebarProjectHostTarget | null {
   const iconWorkingDir = input.iconWorkingDir.trim();
   if (!input.serverId || !iconWorkingDir) {
     return null;
   }
-  return { serverId: input.serverId, projectId: input.projectId, iconWorkingDir };
+  return {
+    serverId: input.serverId,
+    projectId: input.projectId,
+    iconWorkingDir,
+    customIconRevision: input.customIconRevision,
+    iconRevision: input.iconRevision,
+  };
 }
 
 export function resolveSidebarProjectIconTarget(
@@ -41,6 +51,19 @@ export function resolveSidebarProjectIconTarget(
     }
   }
   return null;
+}
+
+export interface SidebarProjectIconTarget extends SidebarProjectHostTarget {
+  projectViewKey: string;
+}
+
+export function resolveSidebarProjectIconTargets(
+  projects: readonly SidebarProjectEntry[],
+): SidebarProjectIconTarget[] {
+  return projects.flatMap((project) => {
+    const target = resolveSidebarProjectIconTarget(project);
+    return target ? [{ projectViewKey: project.viewKey, ...target }] : [];
+  });
 }
 
 export function resolveSidebarProjectLocalPath(
@@ -62,7 +85,10 @@ function resolveNewWorkspaceTarget(
   supportsMultiplicityByServerId: ReadonlyMap<string, boolean>,
 ): SidebarProjectHostTarget | null {
   for (const host of project.hosts) {
-    if (!host.canCreateWorktree && !supportsMultiplicityByServerId.get(host.serverId)) {
+    if (
+      host.worktreeSupport === "unsupported" &&
+      !supportsMultiplicityByServerId.get(host.serverId)
+    ) {
       continue;
     }
     const target = hostTarget(host);

@@ -19,10 +19,10 @@ import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles"
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import {
   getTerminalProfileIcon,
-  resolveTerminalProfiles,
+  DEFAULT_TERMINAL_PROFILES,
 } from "@getpaseo/protocol/terminal-profiles";
+import { AgentProfilesSection } from "@/agent-profiles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
-import { AdaptiveRenameModal } from "@/components/rename-modal";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,7 @@ import {
 import { ProvidersSection } from "@/screens/settings/providers-section";
 import { ProviderUsageSettingsSection } from "@/provider-usage/settings-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
+import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
@@ -237,9 +238,7 @@ function HostConnectionError({ serverId }: { serverId: string }) {
 }
 
 export function HostConnectionsPage({ serverId }: { serverId: string }) {
-  const { t } = useTranslation();
   const host = useHostProfile(serverId);
-  const isLocalDaemon = useIsLocalDaemon(serverId);
 
   if (!host) {
     return <HostNotFound />;
@@ -249,12 +248,22 @@ export function HostConnectionsPage({ serverId }: { serverId: string }) {
     <View>
       <HostConnectionError serverId={serverId} />
       <ConnectionsSection host={host} />
-      {isLocalDaemon ? (
-        <SettingsSection title={t("settings.host.pairDevices.title")}>
-          <PairDeviceRow />
-        </SettingsSection>
-      ) : null}
     </View>
+  );
+}
+
+export function HostPairDevicePage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const host = useHostProfile(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  return (
+    <SettingsSection title={t("settings.host.pairDevices.title")}>
+      <PairDeviceRow serverId={serverId} />
+    </SettingsSection>
   );
 }
 
@@ -280,6 +289,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
           <Text style={styles.emptyText}>{t("settings.host.agents.unavailable")}</Text>
         </View>
       )}
+      <AgentProfilesSection serverId={serverId} />
     </View>
   );
 }
@@ -360,10 +370,11 @@ export function HostSettingsPage({
         <Text style={styles.daemonHeaderLabel} numberOfLines={1}>
           {host.label}
         </Text>
-        <HostRenameButton host={host} />
       </View>
 
       <HostStatusBadges serverId={serverId} />
+
+      <HostAppearanceSection host={host} />
 
       {isLocalDaemon ? <LocalDaemonSection /> : null}
 
@@ -371,51 +382,6 @@ export function HostSettingsPage({
 
       <RemoveHostSection host={host} isLocalDaemon={isLocalDaemon} onRemoved={onHostRemoved} />
     </View>
-  );
-}
-
-export function HostRenameButton({ host }: { host: HostProfile }) {
-  const { t } = useTranslation();
-  const { theme } = useUnistyles();
-  const { renameHost } = useHostMutations();
-  const [isEditing, setIsEditing] = useState(false);
-
-  const handleSubmit = useCallback(
-    async (value: string) => {
-      const nextLabel = value.trim();
-      if (nextLabel === host.label.trim()) return;
-      await renameHost(host.serverId, nextLabel);
-    },
-    [host.label, host.serverId, renameHost],
-  );
-
-  const openEditor = useCallback(() => setIsEditing(true), []);
-  const closeEditor = useCallback(() => setIsEditing(false), []);
-
-  return (
-    <>
-      <Pressable
-        onPress={openEditor}
-        hitSlop={8}
-        style={styles.identityEditButton}
-        accessibilityRole="button"
-        accessibilityLabel={t("settings.host.daemon.rename.editLabel")}
-        testID="host-page-label-edit-button"
-      >
-        <Pencil size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-      </Pressable>
-
-      <AdaptiveRenameModal
-        visible={isEditing}
-        title={t("settings.host.daemon.rename.title")}
-        initialValue={host.label}
-        placeholder={t("settings.host.daemon.rename.placeholder")}
-        submitLabel={t("settings.host.daemon.rename.submit")}
-        onClose={closeEditor}
-        onSubmit={handleSubmit}
-        testID="host-page-rename-modal"
-      />
-    </>
   );
 }
 
@@ -1241,7 +1207,7 @@ function AppendSystemPromptCard({ serverId }: { serverId: string }) {
   );
 }
 
-function PairDeviceRow() {
+function PairDeviceRow({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1265,6 +1231,7 @@ function PairDeviceRow() {
       </Pressable>
 
       <PairDeviceModal
+        serverId={serverId}
         visible={isModalOpen}
         onClose={handleClose}
         testID="host-page-pair-device-card"
@@ -1582,8 +1549,11 @@ function TerminalProfilesSection({ serverId }: { serverId: string }) {
   } | null>(null);
   const [isAdding, setIsAdding] = useState(false);
 
+  // Settings edits what is persisted, not the adopted view. Any save here
+  // writes the whole list back, so resolving first would bake read-time prompt
+  // adoption into the user's config the first time they reorder a row.
   const profiles = useMemo(
-    () => (config ? resolveTerminalProfiles(config.terminalProfiles) : null),
+    () => (config ? (config.terminalProfiles ?? DEFAULT_TERMINAL_PROFILES) : null),
     [config],
   );
 
@@ -1846,10 +1816,6 @@ const styles = StyleSheet.create((theme) => ({
   updateFailure: {
     marginHorizontal: theme.spacing[4],
     marginBottom: theme.spacing[4],
-  },
-  identityEditButton: {
-    padding: theme.spacing[1],
-    borderRadius: theme.borderRadius.md,
   },
   daemonHeader: {
     flexDirection: "row",

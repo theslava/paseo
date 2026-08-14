@@ -69,6 +69,7 @@ not retain non-Git directories.
 | `server/bootstrap.ts`           | Daemon initialization: HTTP server, WS server, agent manager, storage, relay  |
 | `server/websocket-server.ts`    | WebSocket connection management, hello handshake, binary frame routing        |
 | `server/session.ts`             | Per-client session state, timeline subscriptions, terminal operations         |
+| `server/directory-sync/`        | Daemon-global latest-state sequences for projects, workspaces, and agents     |
 | `server/agent/agent-manager.ts` | Agent lifecycle state machine, timeline tracking, subscriber management       |
 | `server/agent/agent-storage.ts` | File-backed JSON persistence at `$PASEO_HOME/agents/`                         |
 | `server/agent/tools/`           | Transport-neutral catalog for workspaces, agents, permissions, and automation |
@@ -76,8 +77,6 @@ not retain non-Git directories.
 | `server/agent/providers/`       | Provider adapters (see "Agent providers" below)                               |
 | `server/relay-transport.ts`     | Outbound relay connection with E2E encryption                                 |
 | `server/schedule/`              | Cron-based scheduled agents                                                   |
-| `server/loop-service.ts`        | Looping agent runs that retry until an exit condition                         |
-| `server/chat/`                  | Chat rooms for agent-to-agent and human-to-agent messaging                    |
 
 ### `packages/protocol` — Wire schemas and shared protocol types
 
@@ -99,19 +98,27 @@ Cross-platform React Native app that connects to one or more daemons.
 
 - Expo Router navigation (`/h/[serverId]/workspace/[workspaceId]`, `/h/[serverId]/agent/[agentId]`, etc.). The `workspaceId` URL segment is an opaque workspace id, not a directly meaningful filesystem path.
 - `HostRuntimeController` manages saved host connections, reconnection, and per-host runtime state
-- `runtime/replica-cache` keeps a non-authoritative per-host display replica in AsyncStorage: only the last focused agent, its workspace, and a short timeline tail. It restores before navigation becomes ready, leaves remote hydration flags false, and is atomically replaced by the normal snapshot-plus-delta synchronization path.
+- `runtime/replica-cache` keeps the complete project, workspace, and active-agent directory plus one short focused timeline tail in AsyncStorage. It restores before navigation becomes ready and leaves remote hydration flags false.
+- `runtime/directory-sync` owns directory reconciliation. On reconnect it passes the persisted per-entity cursor through `project.list`, `fetch_workspaces`, and `fetch_agents`; the daemon returns each entity's latest projection when its sequence is newer, plus tombstones.
 - `SessionContext` wraps the daemon client for the active session
 - Composer UI and submit/draft behavior live in `packages/app/src/composer/`; screens and panels should integrate it from there instead of dropping composer internals into `components/`, `hooks/`, or `screens/workspace/`
 - Timeline reducers in `timeline/session-stream-reducers.ts` handle compaction, gap detection, sequence-based deduplication
 - Timeline sync correctness is documented in [docs/timeline-sync.md](timeline-sync.md): live streams are for immediacy, `fetch_agent_timeline_request` is authoritative, and catch-up is paged but complete.
 - Voice features: dictation (STT) and voice agent (realtime)
 
-The replica cache exists only to paint stale data immediately while the host connects. It does not
-own mutations, infer deletions, or replace daemon reconciliation. Pending permission requests are
-not restored from it. AsyncStorage is not encrypted, so the cached timeline tail may contain source
-code, prompts, and tool output; encrypted-at-rest storage is a separate product/security decision.
-Its serialized payload has a 1 MiB byte budget and evicts whole host snapshots in least-recently-
-written order; a single oversized host is omitted rather than partially restored.
+The replica cache paints stale data immediately while the host connects. Directory cursors are
+reconciliation checkpoints; cached entities remain non-authoritative until the daemon answers.
+Pending permission requests are not restored from it. AsyncStorage is not encrypted, so the cached
+timeline tail may contain source code, prompts, and tool output; encrypted-at-rest storage is a
+separate product/security decision. Its serialized payload has a 32 MiB byte budget and evicts whole
+host snapshots in least-recently-written order; a single oversized host is omitted rather than
+partially restored. Browser and Electron builds store it in IndexedDB. Native builds use
+AsyncStorage, and Android reserves 64 MiB for that database.
+
+The three directory entity types have independent monotonic sequences and share one daemon
+generation. The daemon retains only the latest projection per entity and bounded tombstones, not an
+event log. A missing, expired, or previous-generation cursor receives a full snapshot. Projects are
+independent records; a project with no workspaces does not need a workspace placeholder.
 
 ### `packages/cli` — Command-line client
 
@@ -119,13 +126,11 @@ Commander.js CLI with Docker-style commands. Common agent operations are also ex
 
 - `paseo agent ls/run/import/attach/logs/stop/delete/send/inspect/wait/archive/reload/update/mode`
 - `paseo daemon start/stop/restart/status/pair/set-password`
-- `paseo chat ls/create/inspect/post/read/wait/delete`
 - `paseo terminal ls/create/capture/send-keys/kill`
 - `paseo script ls/start/stop`
-- `paseo loop run/ls/inspect/logs/stop`
 - `paseo schedule create/ls/inspect/update/pause/resume/run-once/logs/delete`
 - `paseo heartbeat create/update/delete`
-- `paseo workspace create/ls/archive`
+- `paseo workspace create/ls/rename/archive`
 - `paseo permit allow/deny/ls`
 - `paseo provider ls/models`
 - hidden legacy `paseo worktree create/ls/archive` compatibility alias
@@ -141,6 +146,7 @@ Enables remote access when the daemon is behind a firewall.
 - The relay is zero-knowledge — it routes encrypted bytes and cannot read content
 - Client and daemon channels with identical API (`createClientChannel`, `createDaemonChannel`)
 - Pairing via QR code transfers the daemon's public key to the client
+- New homes keep relay disabled until pairing consent. `DaemonConfigStore` persists the desired state, while the relay runtime starts or stops the outbound transport live; pairing reads that current state instead of a startup snapshot.
 - Optional E2EE capability negotiation preserves application frame kind: text plaintext uses base64 ciphertext text frames, while binary plaintext uses raw ciphertext binary frames; mixed-version peers remain base64-only
 - Self-hosted relays opt into TLS with `daemon.relay.useTls` or `PASEO_RELAY_USE_TLS=true`; the public (client-facing) TLS setting can be overridden independently via `daemon.relay.publicUseTls` or `PASEO_RELAY_PUBLIC_USE_TLS`
 
@@ -228,6 +234,11 @@ New session RPCs use dotted names with `.request` and `.response` suffixes, such
 - `agent_permission_request` / `agent_permission_resolved` — Tool-call permission flow
 - `agent_deleted`, `agent_archived`, `agent_status`, `agent_list`
 - `checkout_status_update`, `checkout_diff_update`, and the full `checkout_*` request/response set for git operations
+
+Agent snapshots optionally carry the daemon-owned active turn identity, and turn lifecycle stream events
+optionally carry the same `turnId`. New clients use these fields when present and normalize an old daemon's
+status once at the directory boundary rather than maintaining a second activity model.
+
 - Terminal subscribe/input/capture commands
 - Voice/dictation streaming events (`dictation_stream_*`, `assistant_chunk`, `audio_output`, `transcription_result`)
 - Request/response pairs for fetch, list, create, etc., correlated by `requestId`; failures use `rpc_error`
@@ -293,7 +304,10 @@ initializing → idle ⇄ running
 `ManagedAgent` is a discriminated union over those lifecycle tags. Notes:
 
 - **AgentManager** is the source of truth for agent state and broadcasts updates to all subscribers
-- Timeline is append-only with epochs (each run starts a new epoch). Storage uses sequence numbers for client-side dedup; the default fetch page is 200 items
+- Timeline sequence allocation is append-only with epochs (each run starts a new epoch). The one
+  permitted in-place enrichment adds a provider message id to the manager-owned row for an accepted
+  prompt; it preserves the row's sequence, content, and timestamp. Storage uses sequence numbers for
+  client-side dedup; the default fetch page is 200 items.
 - Timeline row `timestamp` values are canonical daemon-owned timestamps. Providers may supply original replay timestamps, but clients must not guess timestamp trust or hide time UI based on local clock heuristics.
 - Events stream to connected clients in real time; correctness is backed by authoritative timeline fetches and paged-to-completion catch-up.
 - Agent state persists to `$PASEO_HOME/agents/{cwd-with-dashes}/{agent-id}.json` (timeline rows live alongside the record). That storage path is derived from `cwd`, not from workspace id.
@@ -374,9 +388,8 @@ $PASEO_HOME/
 ├── agents/{cwd-with-dashes}/{agent-id}.json   # Agent record + persisted timeline rows
 ├── projects/projects.json                      # Project registry
 ├── projects/workspaces.json                    # Workspace registry
-├── chat/                                       # Chat rooms
+├── projects/icons/                             # Custom project icon images
 ├── schedules/                                  # Scheduled-agent definitions and runs
-├── loops/                                      # Loop runs and logs
 ├── config.json                                 # Daemon config (mutable)
 ├── daemon-keypair.json                         # Daemon identity for relay/E2EE
 ├── push-tokens.json                            # Mobile push tokens

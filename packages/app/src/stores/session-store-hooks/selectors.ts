@@ -16,6 +16,7 @@ export interface SessionsSnapshot {
     string,
     {
       hasHydratedWorkspaces?: boolean;
+      hasWorkspaceDirectorySnapshot?: boolean;
       workspaces: Map<string, WorkspaceDescriptor>;
       projects?: Map<string, ProjectDescriptor>;
     }
@@ -138,6 +139,18 @@ export function selectHydratedWorkspaceServerIds(
   return serverIds.filter((serverId) => state.sessions[serverId]?.hasHydratedWorkspaces === true);
 }
 
+export function selectWorkspaceDirectoryServerIds(
+  state: SessionsSnapshot,
+  serverIds: readonly string[],
+): string[] {
+  return serverIds.filter((serverId) => {
+    const session = state.sessions[serverId];
+    return (
+      session?.hasHydratedWorkspaces === true || session?.hasWorkspaceDirectorySnapshot === true
+    );
+  });
+}
+
 export function selectWorkspaceStructureProjects(
   state: SessionsSnapshot,
   serverIds: readonly string[],
@@ -214,8 +227,7 @@ export function composeWorkspaceStructure(input: {
 
   const orderedProjects = applyStoredOrdering({
     items: input.projects.map((project) => {
-      const workspaceOrder =
-        input.workspaceOrderByScope[project.projectKey] ?? EMPTY_WORKSPACE_KEYS;
+      const workspaceOrder = input.workspaceOrderByScope[project.viewKey] ?? EMPTY_WORKSPACE_KEYS;
       return {
         ...project,
         workspaceKeys: applyStoredOrdering({
@@ -226,7 +238,7 @@ export function composeWorkspaceStructure(input: {
       };
     }),
     storedOrder: input.projectOrder,
-    getKey: (project) => project.projectKey,
+    getKey: (project) => project.viewKey,
   });
 
   return { projects: orderedProjects };

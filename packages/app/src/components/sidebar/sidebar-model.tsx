@@ -9,6 +9,7 @@ import type { StatusGroup } from "@/hooks/sidebar-status-view-model";
 import { usePinnedSidebarKeys, type PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import { useSidebarViewStore, type SidebarGroupMode } from "@/stores/sidebar-view-store";
+import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
 import type { SidebarShortcutModel } from "@/utils/sidebar-shortcuts";
 import { buildSidebarProjection } from "./sidebar-projection";
 
@@ -18,7 +19,7 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   statusGroups: StatusGroup[];
   pinnedGroups: PinnedSidebarGroups;
   collapsedProjectKeys: ReadonlySet<string>;
-  toggleProjectCollapsed: (projectKey: string) => void;
+  toggleProjectCollapsed: (projectViewKey: string) => void;
   shortcutModel: SidebarShortcutModel;
 }
 
@@ -41,6 +42,7 @@ export function SidebarModelProvider({
     (state) => state.collapsedStatusGroupKeys,
   );
   const pinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
+  const pinnedWorkspaceOrder = useSidebarOrderStore((state) => state.pinnedWorkspaceOrder);
   const toggleProjectCollapsed = useSidebarCollapsedSectionsStore(
     (state) => state.toggleProjectCollapsed,
   );
@@ -58,8 +60,9 @@ export function SidebarModelProvider({
       buildSidebarProjection({
         projects: list.projects,
         pinnedKeys,
+        pinnedWorkspaceOrder,
         workspaceEntriesByKey: projectionWorkspaceEntriesByKey,
-        projectNamesByKey: list.projectNamesByKey,
+        projectNamesByViewKey: list.projectNamesByViewKey,
         groupMode,
         pinnedCollapsed,
         collapsedProjectKeys,
@@ -69,10 +72,11 @@ export function SidebarModelProvider({
       collapsedProjectKeys,
       collapsedStatusGroupKeys,
       groupMode,
-      list.projectNamesByKey,
+      list.projectNamesByViewKey,
       list.projects,
       pinnedCollapsed,
       pinnedKeys,
+      pinnedWorkspaceOrder,
       projectionWorkspaceEntriesByKey,
     ],
   );

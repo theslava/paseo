@@ -9,7 +9,7 @@ import {
 } from "./agent/provider-launch-config.js";
 import type { AgentProviderRuntimeSettingsMap } from "./agent/provider-launch-config.js";
 import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.js";
-import { TerminalProfileSchema } from "@getpaseo/protocol/messages";
+import { AgentProfileSchema, TerminalProfileSchema } from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -248,10 +248,18 @@ export const PersistedConfigSchema = z
           })
           .passthrough()
           .optional(),
+        git: z
+          .object({
+            maxProcessesPerSecond: z.number().int().positive().optional(),
+            maxProcessConcurrency: z.number().int().positive().optional(),
+          })
+          .strict()
+          .optional(),
         autoArchiveAfterMerge: z.boolean().optional(),
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
+        agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z
           .object({
             allowedOrigins: z.array(z.string()).optional(),
@@ -300,6 +308,7 @@ export const PersistedConfigSchema = z
     agents: z
       .object({
         providers: z.preprocess(normalizeAgentProviders, ProviderOverridesSchema).optional(),
+        catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
       })
       .strict()
@@ -334,7 +343,7 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
       allowedOrigins: ["https://app.paseo.sh"],
     },
     relay: {
-      enabled: true,
+      enabled: false,
     },
   },
   app: {

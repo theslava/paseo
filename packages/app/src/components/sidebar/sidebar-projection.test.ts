@@ -11,7 +11,7 @@ function makeWorkspace(id: string, statusBucket: SidebarWorkspaceEntry["statusBu
     workspaceKey: `srv:${id}`,
     serverId: "srv",
     workspaceId: id,
-    projectKey: "project",
+    projectViewKey: "project",
     projectName: "Project",
     projectKind: "git",
     workspaceKind: "worktree",
@@ -19,6 +19,8 @@ function makeWorkspace(id: string, statusBucket: SidebarWorkspaceEntry["statusBu
   };
   const entry: SidebarWorkspaceEntry = {
     ...placement,
+    workspaceDirectory: "",
+    workspaceDirectoryLabel: "",
     title: null,
     currentBranch: null,
     statusBucket,
@@ -36,7 +38,7 @@ function makeWorkspace(id: string, statusBucket: SidebarWorkspaceEntry["statusBu
 
 function makeProject(workspaces: SidebarWorkspacePlacement[]): SidebarProjectEntry {
   return {
-    projectKey: "project",
+    viewKey: "project",
     projectName: "Project",
     projectKind: "git",
     iconWorkingDir: "/repo",
@@ -45,7 +47,7 @@ function makeProject(workspaces: SidebarWorkspacePlacement[]): SidebarProjectEnt
         serverId: "srv",
         projectId: "project",
         iconWorkingDir: "/repo",
-        canCreateWorktree: true,
+        worktreeSupport: "supported" as const,
       },
     ],
     workspaces,
@@ -64,11 +66,12 @@ function projectionInput(options?: {
       pinnedWorkspaceKeys: [pinned.placement.workspaceKey],
       pinnedAtByKey: { [pinned.placement.workspaceKey]: "2026-07-12T12:00:00.000Z" },
     },
+    pinnedWorkspaceOrder: [],
     workspaceEntriesByKey: new Map([
       [pinned.entry.workspaceKey, pinned.entry],
       [unpinned.entry.workspaceKey, unpinned.entry],
     ]),
-    projectNamesByKey: new Map([["project", "Project"]]),
+    projectNamesByViewKey: new Map([["project", "Project"]]),
     groupMode: options?.groupMode ?? ("project" as const),
     pinnedCollapsed: options?.pinnedCollapsed ?? false,
     collapsedProjectKeys: new Set<string>(),
